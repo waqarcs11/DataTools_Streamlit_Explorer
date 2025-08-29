@@ -85,7 +85,7 @@ def is_date_type(dtype: str) -> bool:
 # Sidebar: source selection
 # -----------------------------
 with st.sidebar:
-    st.header("1) Choose dataset")
+    st.header("Choose dataset")
     dbs = list_databases()
     if not dbs:
         st.error("No databases visible for this role.")
