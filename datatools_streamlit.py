@@ -63,6 +63,11 @@ def list_tables(db: str, schema: str) -> list[str]:
     df = _normalize_cols(df)
     return (df["name"] if "name" in df.columns else df["table_name"]).tolist()
 
+def list_views(db: str, schema: str) -> list[str]:
+    df = session.sql(f'SHOW VIEWS IN SCHEMA "{db}"."{schema}"').to_pandas()
+    df = _normalize_cols(df)
+    return (df["name"] if "name" in df.columns else df["view_name"]).tolist()
+
 def get_columns(db: str, schema: str, table: str) -> pd.DataFrame:
     sql = f"""
     SELECT COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION
@@ -94,11 +99,30 @@ with st.sidebar:
     db = st.selectbox("Database", dbs, index=min(1, len(dbs)-1))
     schemas = list_schemas(db)
     schema = st.selectbox("Schema", schemas)
-    tables = list_tables(db, schema)
-    if not tables:
-        st.warning("No tables in this schema.")
+    # Allow choosing between tables and views
+    object_type = st.radio("Object type", options=["Table", "View", "Both"], index=0, horizontal=True)
+    tables = []
+    views = []
+    if object_type in ["Table", "Both"]:
+        tables = list_tables(db, schema)
+    if object_type in ["View", "Both"]:
+        views = list_views(db, schema)
+
+    objects = []
+    if tables:
+        objects.extend([("table", t) for t in tables])
+    if views:
+        objects.extend([("view", v) for v in views])
+
+    if not objects:
+        st.warning(f"No {object_type.lower()}s in this schema.")
         st.stop()
-    table = st.selectbox("Table", tables)
+
+    # Present combined list but show type label
+    display_names = [f"{typ.upper()}: {name}" for typ, name in objects]
+    sel_idx = st.selectbox("Object", display_names)
+    sel_type, sel_name = objects[display_names.index(sel_idx)]
+    table = sel_name
 
     cols_df = get_columns(db, schema, table)
     all_cols = cols_df["COLUMN_NAME"].tolist()
