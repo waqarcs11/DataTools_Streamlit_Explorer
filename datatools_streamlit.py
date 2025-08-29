@@ -43,18 +43,25 @@ def escape_literal(val: str) -> str:
     # Minimal escaping for SQL string literals
     return val.replace("'", "''")
 
-def list_databases() -> List[str]:
+def _normalize_cols(df):
+    df.columns = [c.strip().strip('"').lower().replace(" ", "_") for c in df.columns]
+    return df
+
+def list_databases() -> list[str]:
     df = session.sql("SHOW DATABASES").to_pandas()
-    st.dataframe(df)
-    df = df.rename(columns=str.lower)     # or: df.columns = [c.lower() for c in df.columns]
-    dbs = df["name"].tolist()
-    return dbs
+    df = _normalize_cols(df)
+    return df["name"].tolist()  # now it exists
 
-def list_schemas(db: str) -> List[str]:
-    return session.sql(f"SHOW SCHEMAS IN DATABASE {q_ident(db)}").to_pandas()["name"].tolist()
+def list_schemas(db: str) -> list[str]:
+    df = session.sql(f'SHOW SCHEMAS IN DATABASE "{db}"').to_pandas()
+    df = _normalize_cols(df)
+    # Snowflake sometimes returns schema_name; handle both
+    return (df["name"] if "name" in df.columns else df["schema_name"]).tolist()
 
-def list_tables(db: str, schema: str) -> List[str]:
-    return session.sql(f"SHOW TABLES IN SCHEMA {q_ident(db)}.{q_ident(schema)}").to_pandas()["name"].tolist()
+def list_tables(db: str, schema: str) -> list[str]:
+    df = session.sql(f'SHOW TABLES IN SCHEMA "{db}"."{schema}"').to_pandas()
+    df = _normalize_cols(df)
+    return (df["name"] if "name" in df.columns else df["table_name"]).tolist()
 
 def get_columns(db: str, schema: str, table: str) -> pd.DataFrame:
     sql = f"""
