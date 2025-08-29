@@ -43,14 +43,20 @@ def escape_literal(val: str) -> str:
     # Minimal escaping for SQL string literals
     return val.replace("'", "''")
 
-def list_databases() -> List[str]:
-    return session.sql("SHOW DATABASES").to_pandas()["name"].tolist()
+def list_databases():
+    df = session.sql("SHOW DATABASES").to_pandas()
+    df.columns = [c.lower() for c in df.columns]
+    return df["name"].tolist()
 
-def list_schemas(db: str) -> List[str]:
-    return session.sql(f"SHOW SCHEMAS IN DATABASE {q_ident(db)}").to_pandas()["name"].tolist()
+def list_schemas(db: str):
+    df = session.sql(f'SHOW SCHEMAS IN DATABASE "{db}"').to_pandas()
+    df.columns = [c.lower() for c in df.columns]
+    return df["name"].tolist()
 
-def list_tables(db: str, schema: str) -> List[str]:
-    return session.sql(f"SHOW TABLES IN SCHEMA {q_ident(db)}.{q_ident(schema)}").to_pandas()["name"].tolist()
+def list_tables(db: str, schema: str):
+    df = session.sql(f'SHOW TABLES IN SCHEMA "{db}"."{schema}"').to_pandas()
+    df.columns = [c.lower() for c in df.columns]
+    return df["name"].tolist()
 
 def get_columns(db: str, schema: str, table: str) -> pd.DataFrame:
     sql = f"""
