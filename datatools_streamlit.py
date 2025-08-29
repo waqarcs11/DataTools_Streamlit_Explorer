@@ -45,7 +45,7 @@ def escape_literal(val: str) -> str:
 
 def list_databases() -> List[str]:
     df = session.sql("SHOW DATABASES").to_pandas()
-     st.write("Database df columns:", df)
+    st.dataframe(df)
     df = df.rename(columns=str.lower)     # or: df.columns = [c.lower() for c in df.columns]
     dbs = df["name"].tolist()
     return dbs
