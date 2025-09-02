@@ -176,7 +176,9 @@ with st.expander("Aggregations (optional)"):
     agg_rows = st.session_state.agg_rows
 
 with st.expander("Filters (WHERE)", expanded=False):
-    st.caption("Build row-level filters (AND logic). For IN, comma-separate values.")
+    st.caption("Build row-level filters. For IN, comma-separate values.")
+    # New control to choose whether multiple filters are combined with AND or OR
+    filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0, horizontal=True)
     if "filters" not in st.session_state:
         st.session_state.filters = []
     if st.button("➕ Add filter"):
@@ -291,7 +293,11 @@ def build_sql() -> str:
         else:
             where_clauses.append(f"{col} {op} '{escape_literal(val)}'")
 
-    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    # Join WHERE clauses using selected filter_mode
+    where_sql = ""
+    if where_clauses:
+        joined = f" {filter_mode} ".join(where_clauses)
+        where_sql = f"WHERE {joined}"
 
     # GROUP BY
     group_sql = ""
