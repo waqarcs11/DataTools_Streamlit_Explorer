@@ -177,19 +177,11 @@ with st.expander("Aggregations (optional)"):
 
 # Implement a custom expander for Filters so we can detect collapsed/open state
 # Use a session-state toggle, because Streamlit's built-in expander doesn't expose its state
-if "filters_open" not in st.session_state:
-    st.session_state.filters_open = False
-if "filters" not in st.session_state:
-    st.session_state.filters = []
-
-# Render a simple expander header with a toggle button
-toggle_label = ("▾ Filters (WHERE)" if st.session_state.filters_open else "▸ Filters (WHERE)")
-if st.button(toggle_label, key="filters_toggle"):
-    st.session_state.filters_open = not st.session_state.filters_open
-
-if st.session_state.filters_open:
+with st.expander("Filters (WHERE)", expanded=False):
     st.caption("Build row-level filters. For IN, comma-separate values.")
-    if st.button("➕ Add filter", key="add_filter"):
+    if "filters" not in st.session_state:
+        st.session_state.filters = []
+    if st.button("➕ Add filter"):
         st.session_state.filters.append({"col": all_cols[0] if all_cols else "", "op": "=", "val": ""})
 
     del_idx = []
@@ -211,15 +203,11 @@ if st.session_state.filters_open:
     for idx in sorted(del_idx, reverse=True):
         del st.session_state.filters[idx]
     filters = st.session_state.filters
-
     # Place filter mode control below the filter rows for better UX
     if "filter_mode" not in st.session_state:
         st.session_state.filter_mode = "AND"
     st.session_state.filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0 if st.session_state.filter_mode == "AND" else 1, horizontal=True)
     filter_mode = st.session_state.filter_mode
-else:
-    # Collapsed: keep filters variable synced and show preview below the expander header
-    filters = st.session_state.filters
 
 with st.expander("Group By", expanded=False):
     group_cols = st.multiselect("Columns to GROUP BY", all_cols, default=[])
