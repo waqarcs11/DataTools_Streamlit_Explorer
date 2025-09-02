@@ -385,9 +385,9 @@ if filters:
         else:
             preview_clauses.append(f"{col} {op} '{escape_literal(val)}'")
 
-    if preview_clauses:
-        where_preview = f"WHERE and  {' ' + filter_mode + ' '.join(['']+preview_clauses).strip()}"
-        st.info(where_preview)
+    # if preview_clauses:
+    #     where_preview = f"WHERE and  {' ' + filter_mode + ' '.join(['']+preview_clauses).strip()}"
+    #     st.info(where_preview)
 
 c1, c2 = st.columns([1, 1])
 with c1:
