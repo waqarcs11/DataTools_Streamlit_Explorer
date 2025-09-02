@@ -117,16 +117,28 @@ ICONS = {
 def ops_for_dtype(dtype: str) -> list:
     """Return appropriate operator list for a given column data type."""
     cat = classify_dtype(dtype)
-    common = ["=", "!=", "IS NULL", "IS NOT NULL"]
-    if cat == "numeric":
-        return common + [">", ">=", "<", "<=", "BETWEEN", "IN"]
+    if cat == "numeric" or cat == "date":
+        return ["=", "!=", ">", ">=", "<", "<=", "BETWEEN", "NOT BETWEEN", "IN", "NOT IN", "IS NULL", "IS NOT NULL"]
     if cat == "text":
-        return common + ["LIKE", "ILIKE", "IN"]
-    if cat == "date":
-        return common + [">", ">=", "<", "<=", "BETWEEN", "IN"]
+        return [
+            "=",
+            "!=",
+            "CONTAINS",
+            "NOT_CONTAINS",
+            "STARTS_WITH",
+            "NOT_STARTS_WITH",
+            "ENDS_WITH",
+            "NOT_ENDS_WITH",
+            "IS_EMPTY",
+            "IS_NOT_EMPTY",
+            "IS NULL",
+            "IS NOT NULL",
+            "IN",
+            "NOT IN",
+        ]
     if cat == "boolean":
-        return ["=", "!=", "IS NULL", "IS NOT NULL"]
-    return common + [">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "BETWEEN"]
+        return ["IS_TRUE", "IS_FALSE", "IS NULL", "IS NOT NULL"]
+    return ["=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "NOT IN", "BETWEEN", "NOT BETWEEN", "IS NULL", "IS NOT NULL"]
 
 def ops_for_agg_target(target: str, agg_rows: list, dtype_map: dict) -> list:
     """Determine operator list for a HAVING target (alias or expression).
@@ -367,20 +379,48 @@ def build_sql() -> str:
         col = q_ident(f["col"])
         op = f["op"].upper()
         val = f["val"]
+        # NULL checks
         if op in ["IS NULL", "IS NOT NULL"]:
             where_clauses.append(f"{col} {op}")
-        elif op in ["IN"]:
+        # Boolean shortcuts
+        elif op == "IS_TRUE":
+            where_clauses.append(f"{col} = TRUE")
+        elif op == "IS_FALSE":
+            where_clauses.append(f"{col} = FALSE")
+        # IN / NOT IN
+        elif op in ["IN", "NOT IN"]:
             items = [v.strip() for v in val.split(",") if v.strip() != ""]
             if not items:
                 continue
-            # Quote as strings; Snowflake will cast as needed
             items_sql = ", ".join([f"'{escape_literal(x)}'" for x in items])
-            where_clauses.append(f"{col} IN ({items_sql})")
-        elif op == "BETWEEN":
+            where_clauses.append(f"{col} {op} ({items_sql})")
+        # BETWEEN / NOT BETWEEN
+        elif op in ["BETWEEN", "NOT BETWEEN"]:
             parts = [p.strip() for p in val.split(",")]
             if len(parts) == 2:
-                where_clauses.append(f"{col} BETWEEN '{escape_literal(parts[0])}' AND '{escape_literal(parts[1])}'")
+                where_clauses.append(f"{col} {op} '{escape_literal(parts[0])}' AND '{escape_literal(parts[1])}'")
+        # Text helpers: contains / starts/ends / empty checks
+        elif op in ["CONTAINS", "NOT_CONTAINS"]:
+            if val.strip() == "":
+                continue
+            sql_op = "ILIKE" if op == "CONTAINS" else "NOT ILIKE"
+            where_clauses.append(f"{col} {sql_op} '%{escape_literal(val)}%'")
+        elif op in ["STARTS_WITH", "NOT_STARTS_WITH"]:
+            if val.strip() == "":
+                continue
+            sql_op = "ILIKE" if op == "STARTS_WITH" else "NOT ILIKE"
+            where_clauses.append(f"{col} {sql_op} '{escape_literal(val)}%'")
+        elif op in ["ENDS_WITH", "NOT_ENDS_WITH"]:
+            if val.strip() == "":
+                continue
+            sql_op = "ILIKE" if op == "ENDS_WITH" else "NOT ILIKE"
+            where_clauses.append(f"{col} {sql_op} '%{escape_literal(val)}'")
+        elif op == "IS_EMPTY":
+            where_clauses.append(f"{col} = ''")
+        elif op == "IS_NOT_EMPTY":
+            where_clauses.append(f"{col} <> ''")
         else:
+            # Fallback to binary operator (=, !=, >, <, etc.)
             where_clauses.append(f"{col} {op} '{escape_literal(val)}'")
 
     # Join WHERE clauses using selected filter_mode
