@@ -6,7 +6,7 @@ import pandas as pd
 from typing import List, Dict, Optional
 
 st.set_page_config(page_title="DataTools: Visual SQL Builder", layout="wide")
-st.title("Visual SQL Builder for Snowflake....")
+st.title("Visual SQL Builder for Snowflake.")
 
 # -----------------------------
 # Snowflake session bootstrap
