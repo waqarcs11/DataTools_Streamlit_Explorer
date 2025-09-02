@@ -175,13 +175,21 @@ with st.expander("Aggregations (optional)"):
         del st.session_state.agg_rows[idx]
     agg_rows = st.session_state.agg_rows
 
-with st.expander("Filters (WHERE)", expanded=False):
+# Implement a custom expander for Filters so we can detect collapsed/open state
+# Use a session-state toggle, because Streamlit's built-in expander doesn't expose its state
+if "filters_open" not in st.session_state:
+    st.session_state.filters_open = False
+if "filters" not in st.session_state:
+    st.session_state.filters = []
+
+# Render a simple expander header with a toggle button
+toggle_label = ("▾ Filters (WHERE)" if st.session_state.filters_open else "▸ Filters (WHERE)")
+if st.button(toggle_label, key="filters_toggle"):
+    st.session_state.filters_open = not st.session_state.filters_open
+
+if st.session_state.filters_open:
     st.caption("Build row-level filters. For IN, comma-separate values.")
-    # New control to choose whether multiple filters are combined with AND or OR
-    filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0, horizontal=True)
-    if "filters" not in st.session_state:
-        st.session_state.filters = []
-    if st.button("➕ Add filter"):
+    if st.button("➕ Add filter", key="add_filter"):
         st.session_state.filters.append({"col": all_cols[0] if all_cols else "", "op": "=", "val": ""})
 
     del_idx = []
@@ -202,6 +210,15 @@ with st.expander("Filters (WHERE)", expanded=False):
         st.session_state.filters[i] = {"col": col, "op": op, "val": val}
     for idx in sorted(del_idx, reverse=True):
         del st.session_state.filters[idx]
+    filters = st.session_state.filters
+
+    # Place filter mode control below the filter rows for better UX
+    if "filter_mode" not in st.session_state:
+        st.session_state.filter_mode = "AND"
+    st.session_state.filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0 if st.session_state.filter_mode == "AND" else 1, horizontal=True)
+    filter_mode = st.session_state.filter_mode
+else:
+    # Collapsed: keep filters variable synced and show preview below the expander header
     filters = st.session_state.filters
 
 with st.expander("Group By", expanded=False):
@@ -356,6 +373,33 @@ sql_text = build_sql()
 # -----------------------------
 st.subheader("3) Query preview")
 st.code(sql_text, language="sql")
+
+# Show a compact preview of the WHERE clause when Filters expander is closed
+if filters:
+    # Build the preview using the same logic as build_sql but only for WHERE
+    preview_clauses = []
+    for f in filters:
+        col = q_ident(f["col"])
+        op = f["op"].upper()
+        val = f["val"]
+        if op in ["IS NULL", "IS NOT NULL"]:
+            preview_clauses.append(f"{col} {op}")
+        elif op in ["IN"]:
+            items = [v.strip() for v in val.split(",") if v.strip() != ""]
+            if not items:
+                continue
+            items_sql = ", ".join([f"'{escape_literal(x)}'" for x in items])
+            preview_clauses.append(f"{col} IN ({items_sql})")
+        elif op == "BETWEEN":
+            parts = [p.strip() for p in val.split(",")]
+            if len(parts) == 2:
+                preview_clauses.append(f"{col} BETWEEN '{escape_literal(parts[0])}' AND '{escape_literal(parts[1])}'")
+        else:
+            preview_clauses.append(f"{col} {op} '{escape_literal(val)}'")
+
+    if preview_clauses:
+        where_preview = f"WHERE {' ' + filter_mode + ' '.join(['']+preview_clauses).strip()}"
+        st.info(where_preview)
 
 c1, c2 = st.columns([1, 1])
 with c1:
