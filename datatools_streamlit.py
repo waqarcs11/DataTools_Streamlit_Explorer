@@ -292,7 +292,7 @@ with st.expander("Filters (WHERE)", expanded=False):
             show_val = op not in ["IS NULL", "IS NOT NULL"]
             val = st.text_input(f"Value #{i+1} ({dtype})", value=f.get("val", ""), key=f"f_val_{i}") if show_val else ""
         with c4:
-            if st.button("🗑️", key=f"f_del_{i}"):
+            if st.button("❌", key=f"f_del_{i}"):
                 del_idx.append(i)
         st.session_state.filters[i] = {"col": col, "op": op, "val": val}
     for idx in sorted(del_idx, reverse=True):
@@ -330,7 +330,7 @@ with st.expander("Having (on aggregates)", expanded=False):
         with c3:
             val = st.text_input(f"Value #{i+1}", value=h.get("val", ""), key=f"h_val_{i}")
         with c4:
-            if st.button("🗑️", key=f"h_del_{i}"):
+            if st.button("❌", key=f"h_del_{i}"):
                 del_h.append(i)
         st.session_state.having[i] = {"target": target if isinstance(target, str) else target, "op": op, "val": val}
     for idx in sorted(del_h, reverse=True):
