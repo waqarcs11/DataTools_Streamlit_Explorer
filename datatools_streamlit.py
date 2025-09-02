@@ -86,6 +86,70 @@ def is_date_type(dtype: str) -> bool:
     t = dtype.upper()
     return any(kw in t for kw in ["DATE", "TIME", "TIMESTAMP"])
 
+def is_boolean_type(dtype: str) -> bool:
+    t = dtype.upper()
+    return any(kw in t for kw in ["BOOL", "BOOLEAN", "BIT"])
+
+def classify_dtype(dtype: str) -> str:
+    """Classify a Snowflake DATA_TYPE into one of: text, numeric, date, boolean, other."""
+    if not dtype:
+        return "other"
+    t = dtype.upper()
+    if is_numeric_type(t):
+        return "numeric"
+    if is_date_type(t):
+        return "date"
+    if is_boolean_type(t):
+        return "boolean"
+    # treat common text types as text
+    if any(kw in t for kw in ["CHAR", "VARCHAR", "STRING", "TEXT"]):
+        return "text"
+    return "other"
+
+ICONS = {
+    "text": "🔤",
+    "numeric": "🔢",
+    "date": "📅",
+    "boolean": "🔘",
+    "other": "❓",
+}
+
+def ops_for_dtype(dtype: str) -> list:
+    """Return appropriate operator list for a given column data type."""
+    cat = classify_dtype(dtype)
+    common = ["=", "!=", "IS NULL", "IS NOT NULL"]
+    if cat == "numeric":
+        return common + [">", ">=", "<", "<=", "BETWEEN", "IN"]
+    if cat == "text":
+        return common + ["LIKE", "ILIKE", "IN"]
+    if cat == "date":
+        return common + [">", ">=", "<", "<=", "BETWEEN", "IN"]
+    if cat == "boolean":
+        return ["=", "!=", "IS NULL", "IS NOT NULL"]
+    return common + [">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "BETWEEN"]
+
+def ops_for_agg_target(target: str, agg_rows: list, dtype_map: dict) -> list:
+    """Determine operator list for a HAVING target (alias or expression).
+    If target is one of the aggregate aliases, infer type from the underlying column and function.
+    """
+    # Find matching agg row by alias
+    for a in agg_rows:
+        alias = a.get("alias") or f"{a['func'].lower()}_{a['col'].lower()}"
+        if alias == target:
+            func = a["func"].upper()
+            col = a["col"]
+            # COUNT always numeric
+            if func == "COUNT":
+                return ops_for_dtype("NUMBER")
+            # SUM/AVG numeric
+            if func in ["SUM", "AVG"]:
+                return ops_for_dtype("NUMBER")
+            # MIN/MAX keep column type
+            if func in ["MIN", "MAX"]:
+                return ops_for_dtype(dtype_map.get(col, ""))
+    # Fallback: if we don't know, return a permissive set
+    return ["=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "BETWEEN", "IS NULL", "IS NOT NULL"]
+
 # -----------------------------
 # Sidebar: source selection
 # -----------------------------
@@ -134,7 +198,12 @@ with st.sidebar:
 st.header("2) Configure query")
 
 with st.expander("Select columns", expanded=True):
-    select_cols = st.multiselect("Pick columns to SELECT", options=all_cols, default=all_cols)
+    select_cols = st.multiselect(
+        "Pick columns to SELECT",
+        options=all_cols,
+        default=all_cols,
+        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+    )
 
 with st.expander("Aggregations (optional)"):
     st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
@@ -162,7 +231,13 @@ with st.expander("Aggregations (optional)"):
             options = all_cols if func in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
             if not options:
                 options = all_cols
-            col = st.selectbox(f"Column #{i+1}", options, key=f"agg_col_{i}", index=max(0, options.index(row["col"])) if row["col"] in options else 0)
+            col = st.selectbox(
+                f"Column #{i+1}",
+                options,
+                key=f"agg_col_{i}",
+                index=max(0, options.index(row["col"])) if row["col"] in options else 0,
+                format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+            )
         with c3:
             alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
         with c4:
@@ -188,11 +263,19 @@ with st.expander("Filters (WHERE)", expanded=False):
     for i, f in enumerate(st.session_state.filters):
         c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
         with c1:
-            col = st.selectbox(f"Column #{i+1}", all_cols, key=f"f_col_{i}", index=max(0, all_cols.index(f["col"])) if f["col"] in all_cols else 0)
+            col = st.selectbox(
+                f"Column #{i+1}",
+                all_cols,
+                key=f"f_col_{i}",
+                index=max(0, all_cols.index(f["col"])) if f["col"] in all_cols else 0,
+                format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}",
+            )
         with c2:
             dtype = dtype_map.get(col, "")
-            ops = ["=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "BETWEEN", "IS NULL", "IS NOT NULL"]
-            op = st.selectbox(f"Op #{i+1}", ops, key=f"f_op_{i}", index=ops.index(f["op"]) if f["op"] in ops else 0)
+            ops = ops_for_dtype(dtype)
+            # ensure previous op is still present; otherwise default to first
+            op_index = ops.index(f["op"]) if f["op"] in ops else 0
+            op = st.selectbox(f"Op #{i+1}", ops, key=f"f_op_{i}", index=op_index)
         with c3:
             show_val = op not in ["IS NULL", "IS NOT NULL"]
             val = st.text_input(f"Value #{i+1} ({dtype})", value=f.get("val", ""), key=f"f_val_{i}") if show_val else ""
@@ -228,8 +311,10 @@ with st.expander("Having (on aggregates)", expanded=False):
         with c1:
             target = st.selectbox(f"Aggregate/alias #{i+1}", agg_aliases, key=f"h_target_{i}") if agg_aliases else st.text_input(f"Aggregate expr #{i+1}", key=f"h_target_{i}", value=h.get("target", ""))
         with c2:
-            ops = ["=", "!=", ">", ">=", "<", "<=", "LIKE", "ILIKE", "IN", "BETWEEN"]
-            op = st.selectbox(f"Op #{i+1}", ops, key=f"h_op_{i}", index=ops.index(h["op"]) if h["op"] in ops else 0)
+            # Limit ops based on the aggregate target's inferred type
+            ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
+            op_index = ops.index(h["op"]) if h["op"] in ops else 0
+            op = st.selectbox(f"Op #{i+1}", ops, key=f"h_op_{i}", index=op_index)
         with c3:
             val = st.text_input(f"Value #{i+1}", value=h.get("val", ""), key=f"h_val_{i}")
         with c4:
