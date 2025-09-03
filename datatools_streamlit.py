@@ -304,24 +304,40 @@ with st.expander("Filters (WHERE)", expanded=False):
     st.session_state.filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0 if st.session_state.filter_mode == "AND" else 1, horizontal=True)
     filter_mode = st.session_state.filter_mode
 
-with st.expander("Group By", expanded=False):
-    group_cols = st.multiselect("Columns to GROUP BY", all_cols, default=[])
-
-with st.expander("Having (on aggregates)", expanded=False):
+# -----------------------------
+# Filter Aggregates (previously Having)
+# -----------------------------
+with st.expander("Filter Aggregates", expanded=False):
     st.caption("Apply conditions on aggregate results (e.g., SUM(amount) > 1000).")
     if "having" not in st.session_state:
         st.session_state.having = []
-    if st.button("➕ Add having"):
-        # Default to first agg if exists
-        default_alias = agg_rows[0]["alias"] if agg_rows else ""
+    if st.button("➕ Add filter on aggregate"):
+        # Default to first agg alias if exists
+        default_alias = (agg_rows[0].get("alias") or f"{agg_rows[0]['func'].lower()}_{agg_rows[0]['col'].lower()}") if agg_rows else ""
         st.session_state.having.append({"target": default_alias, "op": ">", "val": ""})
 
     del_h = []
-    agg_aliases = [a["alias"] for a in agg_rows]
+    # Build alias list and map alias -> underlying column for icon inference
+    agg_aliases = []
+    alias_to_col = {}
+    for a in agg_rows:
+        alias = a.get("alias") or f"{a['func'].lower()}_{a['col'].lower()}"
+        agg_aliases.append(alias)
+        alias_to_col[alias] = a["col"]
+
     for i, h in enumerate(st.session_state.having):
         c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
         with c1:
-            target = st.selectbox(f"Aggregate/alias #{i+1}", agg_aliases, key=f"h_target_{i}") if agg_aliases else st.text_input(f"Aggregate expr #{i+1}", key=f"h_target_{i}", value=h.get("target", ""))
+            if agg_aliases:
+                # show icon for the underlying column's data type using format_func
+                target = st.selectbox(
+                    f"Aggregate/alias #{i+1}",
+                    agg_aliases,
+                    key=f"h_target_{i}",
+                    format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}",
+                )
+            else:
+                target = st.text_input(f"Aggregate expr #{i+1}", key=f"h_target_{i}", value=h.get("target", ""))
         with c2:
             # Limit ops based on the aggregate target's inferred type
             ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
@@ -336,6 +352,9 @@ with st.expander("Having (on aggregates)", expanded=False):
     for idx in sorted(del_h, reverse=True):
         del st.session_state.having[idx]
     having = st.session_state.having
+
+with st.expander("Group By", expanded=False):
+    group_cols = st.multiselect("Columns to GROUP BY", all_cols, default=[])
 
 with st.expander("Sort", expanded=False):
     sort_cols = st.multiselect("ORDER BY columns", all_cols, default=[])
