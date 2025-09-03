@@ -217,6 +217,47 @@ with st.expander("Select columns", expanded=True):
         format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
     )
 
+# Place Filters expander directly after Select columns per UX request
+with st.expander("Filters (WHERE)", expanded=False):
+    st.caption("Build row-level filters. For IN, comma-separate values.")
+    if "filters" not in st.session_state:
+        st.session_state.filters = []
+    if st.button("➕ Add filter"):
+        st.session_state.filters.append({"col": all_cols[0] if all_cols else "", "op": "=", "val": ""})
+
+    del_idx = []
+    for i, f in enumerate(st.session_state.filters):
+        c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+        with c1:
+            col = st.selectbox(
+                f"Column #{i+1}",
+                all_cols,
+                key=f"f_col_{i}",
+                index=max(0, all_cols.index(f["col"])) if f["col"] in all_cols else 0,
+                format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}",
+            )
+        with c2:
+            dtype = dtype_map.get(col, "")
+            ops = ops_for_dtype(dtype)
+            # ensure previous op is still present; otherwise default to first
+            op_index = ops.index(f["op"]) if f["op"] in ops else 0
+            op = st.selectbox(f"Op #{i+1}", ops, key=f"f_op_{i}", index=op_index)
+        with c3:
+            show_val = op not in ["IS NULL", "IS NOT NULL"]
+            val = st.text_input(f"Value #{i+1} ({dtype})", value=f.get("val", ""), key=f"f_val_{i}") if show_val else ""
+        with c4:
+            if st.button("❌", key=f"f_del_{i}"):
+                del_idx.append(i)
+        st.session_state.filters[i] = {"col": col, "op": op, "val": val}
+    for idx in sorted(del_idx, reverse=True):
+        del st.session_state.filters[idx]
+    filters = st.session_state.filters
+    # Place filter mode control below the filter rows for better UX
+    if "filter_mode" not in st.session_state:
+        st.session_state.filter_mode = "AND"
+    st.session_state.filter_mode = st.radio("Combine filters with", options=["AND", "OR"], index=0 if st.session_state.filter_mode == "AND" else 1, horizontal=True)
+    filter_mode = st.session_state.filter_mode
+
 with st.expander("Aggregations (optional)"):
     st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
     agg_rows = st.session_state.get("agg_rows", [])
