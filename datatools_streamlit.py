@@ -11,6 +11,7 @@ st.title("Visual SQL Builder for Snowflake.")
 # -----------------------------
 # Snowflake session bootstrap
 # -----------------------------
+@st.cache_resource
 def get_session():
     try:
         # Running inside Streamlit in Snowflake
@@ -47,27 +48,36 @@ def _normalize_cols(df):
     df.columns = [c.strip().strip('"').lower().replace(" ", "_") for c in df.columns]
     return df
 
+@st.cache_data
 def list_databases() -> list[str]:
+    """Return list of databases. Cached to avoid repeated network calls on reruns."""
     df = session.sql("SHOW DATABASES").to_pandas()
     df = _normalize_cols(df)
     return df["name"].tolist()  # now it exists
 
+@st.cache_data
 def list_schemas(db: str) -> list[str]:
+    """Return list of schemas for a database. Cached by db."""
     df = session.sql(f'SHOW SCHEMAS IN DATABASE "{db}"').to_pandas()
     df = _normalize_cols(df)
     # Snowflake sometimes returns schema_name; handle both
     return (df["name"] if "name" in df.columns else df["schema_name"]).tolist()
 
+@st.cache_data
 def list_tables(db: str, schema: str) -> list[str]:
+    """Return list of tables for a schema. Cached by db+schema."""
     df = session.sql(f'SHOW TABLES IN SCHEMA "{db}"."{schema}"').to_pandas()
     df = _normalize_cols(df)
     return (df["name"] if "name" in df.columns else df["table_name"]).tolist()
 
+@st.cache_data
 def list_views(db: str, schema: str) -> list[str]:
+    """Return list of views for a schema. Cached by db+schema."""
     df = session.sql(f'SHOW VIEWS IN SCHEMA "{db}"."{schema}"').to_pandas()
     df = _normalize_cols(df)
     return (df["name"] if "name" in df.columns else df["view_name"]).tolist()
 
+@st.cache_data
 def get_columns(db: str, schema: str, table: str) -> pd.DataFrame:
     sql = f"""
     SELECT COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION
