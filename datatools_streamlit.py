@@ -259,18 +259,16 @@ with st.expander("Filters (WHERE)", expanded=False):
         fid = fil.get("id", fi)
         if not fil.get("col"):
             # placeholder: only column select (match measure column widths)
-            # Put the label in the first narrow column and the selectbox in the next column so
-            # the placeholder select visually matches the width of full rows.
+            # Render the placeholder select in the leftmost column with a label so it
+            # aligns exactly like full filter rows.
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
-                st.write(f"Column #{fi+1}")
-            with c2:
                 key = f"f_col_{fid}"
                 opts = [""] + all_cols
                 if key in st.session_state:
-                    col_sel = st.selectbox("", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+                    col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
                 else:
-                    col_sel = st.selectbox("", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+                    col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
             # if selected, convert to full filter and append placeholder
             if col_sel and col_sel != "":
                 # find and update
