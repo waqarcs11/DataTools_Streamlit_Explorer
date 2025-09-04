@@ -289,6 +289,21 @@ with st.expander("Aggregations (optional)"):
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
         st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
+    # ensure we have a per-row id generator to reliably identify rows across reruns
+    if "_agg_next_id" not in st.session_state:
+        st.session_state["_agg_next_id"] = 0
+    # backfill missing ids for any pre-existing rows (for older saved state)
+    updated = False
+    rows_with_ids = []
+    for r in st.session_state.agg_rows:
+        if "id" not in r:
+            r_id = st.session_state["_agg_next_id"]
+            st.session_state["_agg_next_id"] += 1
+            r["id"] = r_id
+            updated = True
+        rows_with_ids.append(r)
+    if updated:
+        st.session_state.agg_rows = rows_with_ids
 
     # Render agg rows. Rows with empty 'col' are placeholders showing only a column select.
     # First, convert any placeholder selects that already have a selection stored in session_state
@@ -300,8 +315,14 @@ with st.expander("Aggregations (optional)"):
                 sel_val = st.session_state.get(sel_key, "")
                 if sel_val and sel_val != "":
                     func = "COUNT"
-                    new_rows[i] = {"func": func, "col": sel_val, "alias": f"{func.lower()}_{sel_val.lower()}"}
-                    new_rows.append({"func": "COUNT", "col": "", "alias": ""})
+                    # assign a stable id for this converted row
+                    r_id = st.session_state["_agg_next_id"]
+                    st.session_state["_agg_next_id"] += 1
+                    new_rows[i] = {"id": r_id, "func": func, "col": sel_val, "alias": f"{func.lower()}_{sel_val.lower()}"}
+                    # append a new placeholder with its own id
+                    ph_id = st.session_state["_agg_next_id"]
+                    st.session_state["_agg_next_id"] += 1
+                    new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
 
     st.session_state.agg_rows = new_rows
 
@@ -343,18 +364,20 @@ with st.expander("Aggregations (optional)"):
             with c3:
                 alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
             with c4:
-                if st.button("❌", key=f"agg_del_{i}"):
-                    # Store the index to delete in session_state so we can perform the
-                    # mutation after the widget loop. This avoids index-shift and
-                    # widget key collisions on the same rerun.
-                    st.session_state["_agg_delete_idx"] = i
-            new_rows[i] = {"func": func, "col": col, "alias": alias}
+                # use stable id-based keys for delete buttons so clicks map to rows reliably
+                btn_key = f"agg_del_{row.get('id', i)}"
+                if st.button("❌", key=btn_key):
+                    st.session_state["_agg_delete_id"] = row.get("id", i)
+            # preserve id when persisting
+            new_rows[i] = {"id": row.get("id"), "func": func, "col": col, "alias": alias}
 
     # If a delete was requested via session_state, apply it now and trigger a rerun.
-    if "_agg_delete_idx" in st.session_state:
-        del_idx = st.session_state.pop("_agg_delete_idx")
+    if "_agg_delete_id" in st.session_state:
+        del_id = st.session_state.pop("_agg_delete_id")
         rows = list(new_rows)
-        if 0 <= del_idx < len(rows):
+        # find by id
+        del_idx = next((idx for idx, r in enumerate(rows) if r.get("id") == del_id), None)
+        if del_idx is not None:
             del rows[del_idx]
         new_rows = rows
         st.session_state.agg_rows = new_rows
