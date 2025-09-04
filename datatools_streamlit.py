@@ -270,47 +270,67 @@ with st.expander("Filters (WHERE)", expanded=False):
 
 with st.expander("Aggregations (optional)"):
     st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
-    agg_rows = st.session_state.get("agg_rows", [])
+    # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
-        st.session_state.agg_rows = []
+        st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
 
-    add_agg = st.button("➕ Add aggregate")
-    if add_agg:
-        st.session_state.agg_rows.append({"func": "COUNT", "col": all_cols[0] if all_cols else "", "alias": ""})
-
-    # Render agg rows
+    # Render agg rows. Rows with empty 'col' are placeholders showing only a column select.
     to_remove = []
+    new_rows = list(st.session_state.agg_rows)
     for i, row in enumerate(st.session_state.agg_rows):
-        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-        with c1:
-            func = st.selectbox(
-                f"Function #{i+1}",
-                ["COUNT", "SUM", "AVG", "MIN", "MAX"],
-                key=f"agg_func_{i}",
-                index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row["func"]),
-            )
-        with c2:
-            # For SUM/AVG, restrict to numeric columns
-            options = all_cols if func in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
-            if not options:
-                options = all_cols
-            col = st.selectbox(
-                f"Column #{i+1}",
-                options,
-                key=f"agg_col_{i}",
-                index=max(0, options.index(row["col"])) if row["col"] in options else 0,
-                format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-            )
-        with c3:
-            alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
-        with c4:
-            if st.button("❌", key=f"agg_del_{i}"):
-                to_remove.append(i)
-        # persist
-        st.session_state.agg_rows[i] = {"func": func, "col": col, "alias": alias}
-    # remove marked
+        # placeholder
+        if row.get("col", "") == "":
+            c_only = st.columns([3, 1])[0]
+            with c_only:
+                opts = [""] + all_cols
+                sel = st.selectbox(
+                    f"Column #{i+1}",
+                    opts,
+                    key=f"agg_col_{i}",
+                    index=0,
+                    format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
+                )
+            # If user selected a real column, convert placeholder into a real agg row and append a new placeholder
+            if sel and sel != "":
+                func = "COUNT"
+                new_rows[i] = {"func": func, "col": sel, "alias": f"{func.lower()}_{sel.lower()}"}
+                new_rows.append({"func": "COUNT", "col": "", "alias": ""})
+        else:
+            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+            with c1:
+                func = st.selectbox(
+                    f"Function #{i+1}",
+                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
+                    key=f"agg_func_{i}",
+                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row["func"]),
+                )
+            with c2:
+                options = all_cols if func in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
+                if not options:
+                    options = all_cols
+                col = st.selectbox(
+                    f"Column #{i+1}",
+                    options,
+                    key=f"agg_col_{i}",
+                    index=max(0, options.index(row["col"])) if row["col"] in options else 0,
+                    format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+                )
+            with c3:
+                alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
+            with c4:
+                if st.button("❌", key=f"agg_del_{i}"):
+                    to_remove.append(i)
+            new_rows[i] = {"func": func, "col": col, "alias": alias}
+
+    # apply removals
     for idx in sorted(to_remove, reverse=True):
-        del st.session_state.agg_rows[idx]
+        del new_rows[idx]
+
+    # ensure a placeholder exists at the end
+    if not new_rows or new_rows[-1].get("col", "") != "":
+        new_rows.append({"func": "COUNT", "col": "", "alias": ""})
+
+    st.session_state.agg_rows = new_rows
     agg_rows = st.session_state.agg_rows
 
 # -----------------------------
