@@ -367,13 +367,21 @@ with st.expander("Aggregations (optional)"):
                 )
             with c3:
                 rid = row.get("id", i)
-                alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{rid}")
+                # Show alias input; default to current row alias or the generated default
+                default_alias = (row.get("alias") or f"{func.lower()}_{col.lower()}") if col else (row.get("alias") or "")
+                alias_widget_val = st.text_input(f"Alias #{i+1}", value=default_alias, key=f"agg_alias_{rid}")
             with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
                 if st.button("❌", key=btn_key):
                     # defer deletion: record the id to delete and handle after the widget loop
                     st.session_state["_agg_delete_id"] = row.get("id", i)
+            # Determine whether alias should auto-update: if previous alias matched the old generated default
+            prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
+            if (not row.get("alias")) or (row.get("alias") == prev_default):
+                alias = f"{func.lower()}_{col.lower()}" if col else alias_widget_val
+            else:
+                alias = alias_widget_val
             # preserve id when persisting
             new_rows[i] = {"id": row.get("id"), "func": func, "col": col, "alias": alias}
 
