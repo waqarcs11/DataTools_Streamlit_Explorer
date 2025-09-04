@@ -387,6 +387,8 @@ with st.expander("Aggregations (optional)"):
 
     # Now render rows (after conversion). Delete operations are applied immediately to avoid index-shift issues.
     new_rows = list(st.session_state.agg_rows)
+    # Measures header
+    st.subheader("Measures")
     for i, row in enumerate(st.session_state.agg_rows):
         if row.get("col", "") == "":
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
@@ -454,14 +456,20 @@ with st.expander("Aggregations (optional)"):
             with c3:
                 rid = row.get("id", i)
                 alias_key = f"agg_alias_{rid}"
-                # Render alias input; value is stored in session_state under alias_key
-                if alias_key in st.session_state:
-                    alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
+                # Auto-update alias logic must run BEFORE the widget is created to avoid Streamlit errors
+                func_key_local = f"agg_func_{rid}"
+                col_key_local = f"agg_col_{rid}"
+                cur_func_local = st.session_state.get(func_key_local, row.get("func"))
+                cur_col_local = st.session_state.get(col_key_local, row.get("col"))
+                prev_default_local = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
+                new_default_local = f"{cur_func_local.lower()}_{cur_col_local.lower()}" if cur_col_local else ""
+                if alias_key not in st.session_state:
+                    st.session_state[alias_key] = row.get("alias") or new_default_local
                 else:
-                    # initialize with existing alias or blank; actual auto-update logic applied after widgets
-                    init_alias = row.get("alias") or ""
-                    st.session_state[alias_key] = init_alias
-                    alias_widget_val = st.text_input(f"Alias #{i+1}", value=init_alias, key=alias_key)
+                    cur_val_local = st.session_state.get(alias_key, "")
+                    if cur_val_local == prev_default_local or cur_val_local == "":
+                        st.session_state[alias_key] = new_default_local
+                alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
             with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
@@ -476,12 +484,7 @@ with st.expander("Aggregations (optional)"):
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
             cur_alias = st.session_state.get(alias_key, row.get("alias") or "")
-            prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
-            new_default = f"{cur_func.lower()}_{cur_col.lower()}" if cur_col else ""
-            # Auto-update alias only if it was previously blank or equal to the previous generated default
-            if (not cur_alias) or (cur_alias == prev_default):
-                st.session_state[alias_key] = new_default
-                cur_alias = new_default
+            # Do not assign to st.session_state[alias_key] here (widget already instantiated); we already set before widget
             new_rows[i] = {"id": row.get("id"), "func": cur_func, "col": cur_col, "alias": cur_alias}
 
     # If a delete was requested via session_state, apply it now and trigger a rerun.
