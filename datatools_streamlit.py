@@ -344,13 +344,21 @@ with st.expander("Aggregations (optional)"):
                 alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
             with c4:
                 if st.button("❌", key=f"agg_del_{i}"):
-                    # delete immediately and rerun to re-render with updated rows
-                    rows = list(st.session_state.agg_rows)
-                    if i < len(rows):
-                        del rows[i]
-                    st.session_state.agg_rows = rows
-                    _safe_rerun()
+                    # Store the index to delete in session_state so we can perform the
+                    # mutation after the widget loop. This avoids index-shift and
+                    # widget key collisions on the same rerun.
+                    st.session_state["_agg_delete_idx"] = i
             new_rows[i] = {"func": func, "col": col, "alias": alias}
+
+    # If a delete was requested via session_state, apply it now and trigger a rerun.
+    if "_agg_delete_idx" in st.session_state:
+        del_idx = st.session_state.pop("_agg_delete_idx")
+        rows = list(new_rows)
+        if 0 <= del_idx < len(rows):
+            del rows[del_idx]
+        new_rows = rows
+        st.session_state.agg_rows = new_rows
+        _safe_rerun()
 
     # ensure a placeholder exists at the end
     if not new_rows or new_rows[-1].get("col", "") != "":
