@@ -285,7 +285,6 @@ with st.expander("Filters (WHERE)", expanded=False):
     filter_mode = st.session_state.filter_mode
 
 with st.expander("Aggregations (optional)"):
-    st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
     # -----------------------------
     # Dimensions (new): behave like measures - show a placeholder select, convert to full
     # row on selection and append another placeholder. Dimensions will be used in the
