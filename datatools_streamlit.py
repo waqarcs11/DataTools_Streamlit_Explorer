@@ -276,12 +276,27 @@ with st.expander("Aggregations (optional)"):
 
     # Render agg rows. Rows with empty 'col' are placeholders showing only a column select.
     to_remove = []
+    # First, convert any placeholder selects that already have a selection stored in session_state
+    new_rows = list(st.session_state.agg_rows)
+    for i, row in enumerate(list(st.session_state.agg_rows)):
+        if row.get("col", "") == "":
+            sel_key = f"agg_col_{i}"
+            if sel_key in st.session_state:
+                sel_val = st.session_state.get(sel_key, "")
+                if sel_val and sel_val != "":
+                    func = "COUNT"
+                    new_rows[i] = {"func": func, "col": sel_val, "alias": f"{func.lower()}_{sel_val.lower()}"}
+                    new_rows.append({"func": "COUNT", "col": "", "alias": ""})
+
+    st.session_state.agg_rows = new_rows
+
+    # Now render rows (after conversion)
     new_rows = list(st.session_state.agg_rows)
     for i, row in enumerate(st.session_state.agg_rows):
-        # placeholder: keep same column widths as full rows so layout doesn't shift
+        # placeholder
         if row.get("col", "") == "":
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c2:
+            with c1:
                 opts = [""] + all_cols
                 sel = st.selectbox(
                     f"Column #{i+1}",
@@ -290,24 +305,11 @@ with st.expander("Aggregations (optional)"):
                     index=0,
                     format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
                 )
-            # If user selected a real column, convert placeholder into a real agg row, persist immediately and rerun so Function/Alias appear
-            if sel and sel != "":
-                func = "COUNT"
-                new_rows[i] = {"func": func, "col": sel, "alias": f"{func.lower()}_{sel.lower()}"}
-                new_rows.append({"func": "COUNT", "col": "", "alias": ""})
-                st.session_state.agg_rows = new_rows
-                st.experimental_rerun()
         else:
+            # Layout: Column | Function | Alias | Delete
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
-                func = st.selectbox(
-                    f"Function #{i+1}",
-                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
-                    key=f"agg_func_{i}",
-                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row["func"]),
-                )
-            with c2:
-                options = all_cols if func in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
+                options = all_cols if row.get("func", "COUNT") in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
                 if not options:
                     options = all_cols
                 col = st.selectbox(
@@ -316,6 +318,13 @@ with st.expander("Aggregations (optional)"):
                     key=f"agg_col_{i}",
                     index=max(0, options.index(row["col"])) if row["col"] in options else 0,
                     format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+                )
+            with c2:
+                func = st.selectbox(
+                    f"Function #{i+1}",
+                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
+                    key=f"agg_func_{i}",
+                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row.get("func", "COUNT")),
                 )
             with c3:
                 alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
