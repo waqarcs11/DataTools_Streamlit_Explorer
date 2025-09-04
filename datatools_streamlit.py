@@ -286,6 +286,57 @@ with st.expander("Filters (WHERE)", expanded=False):
 
 with st.expander("Aggregations (optional)"):
     st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
+    # -----------------------------
+    # Dimensions (new): allow choosing columns to GROUP BY / include in SELECT when present
+    # -----------------------------
+    st.subheader("Dimensions")
+    if "dims" not in st.session_state:
+        # each dim is {'id': int, 'col': ''}
+        st.session_state["dims"] = []
+
+    # ensure id generator exists
+    if "_agg_next_id" not in st.session_state:
+        st.session_state["_agg_next_id"] = 0
+
+    # Add dimension button
+    if st.button("➕ Add dimension"):
+        nid = st.session_state["_agg_next_id"]
+        st.session_state["_agg_next_id"] += 1
+        st.session_state["dims"].append({"id": nid, "col": ""})
+
+    # render dims rows
+    dim_remove = []
+    for di, d in enumerate(list(st.session_state["dims"])):
+        rid = d.get("id", di)
+        c1, c2 = st.columns([6, 1])
+        with c1:
+            key = f"dim_col_{rid}"
+            opts = [""] + all_cols
+            # if key already in session_state, let widget keep its value; otherwise prefill
+            if key in st.session_state:
+                sel = st.selectbox(f"Column:", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+            else:
+                sel = st.selectbox(f"Column:", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+        with c2:
+            if st.button("🗑️", key=f"dim_del_{rid}"):
+                dim_remove.append(rid)
+        # persist selection into state list
+        # if selectbox has a value, update stored dims
+        if sel and sel != "":
+            # find and update
+            for rr in st.session_state["dims"]:
+                if rr.get("id") == rid:
+                    rr["col"] = sel
+        else:
+            for rr in st.session_state["dims"]:
+                if rr.get("id") == rid:
+                    rr["col"] = rr.get("col", "")
+
+    # apply removals
+    if dim_remove:
+        rows = [r for r in st.session_state["dims"] if r.get("id") not in dim_remove]
+        st.session_state["dims"] = rows
+
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
         st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
@@ -396,32 +447,35 @@ with st.expander("Aggregations (optional)"):
             with c3:
                 rid = row.get("id", i)
                 alias_key = f"agg_alias_{rid}"
-                # Compute previous and new generated defaults
-                prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
-                new_default = f"{func.lower()}_{col.lower()}" if col else ""
-                # If the widget does not yet have a stored value, initialize it from the row alias or the new default.
-                if alias_key not in st.session_state:
-                    st.session_state[alias_key] = row.get("alias") or new_default
+                # Render alias input; value is stored in session_state under alias_key
+                if alias_key in st.session_state:
+                    alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
                 else:
-                    # If the current widget value equals the previous auto-generated default (or empty), update it to the new default
-                    cur_val = st.session_state.get(alias_key, "")
-                    if cur_val == prev_default or cur_val == "":
-                        st.session_state[alias_key] = new_default
-                alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
+                    # initialize with existing alias or blank; actual auto-update logic applied after widgets
+                    init_alias = row.get("alias") or ""
+                    st.session_state[alias_key] = init_alias
+                    alias_widget_val = st.text_input(f"Alias #{i+1}", value=init_alias, key=alias_key)
             with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
                 if st.button("❌", key=btn_key):
                     # defer deletion: record the id to delete and handle after the widget loop
                     st.session_state["_agg_delete_id"] = row.get("id", i)
-            # Determine whether alias should auto-update: if previous alias matched the old generated default
+            # After rendering widgets, read current widget values from session_state to avoid races
+            rid = row.get("id", i)
+            func_key = f"agg_func_{rid}"
+            col_key = f"agg_col_{rid}"
+            alias_key = f"agg_alias_{rid}"
+            cur_func = st.session_state.get(func_key, row.get("func"))
+            cur_col = st.session_state.get(col_key, row.get("col"))
+            cur_alias = st.session_state.get(alias_key, row.get("alias") or "")
             prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
-            if (not row.get("alias")) or (row.get("alias") == prev_default):
-                alias = f"{func.lower()}_{col.lower()}" if col else alias_widget_val
-            else:
-                alias = alias_widget_val
-            # preserve id when persisting
-            new_rows[i] = {"id": row.get("id"), "func": func, "col": col, "alias": alias}
+            new_default = f"{cur_func.lower()}_{cur_col.lower()}" if cur_col else ""
+            # Auto-update alias only if it was previously blank or equal to the previous generated default
+            if (not cur_alias) or (cur_alias == prev_default):
+                st.session_state[alias_key] = new_default
+                cur_alias = new_default
+            new_rows[i] = {"id": row.get("id"), "func": cur_func, "col": cur_col, "alias": cur_alias}
 
     # If a delete was requested via session_state, apply it now and trigger a rerun.
     if "_agg_delete_id" in st.session_state:
