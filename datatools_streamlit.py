@@ -558,14 +558,11 @@ with st.expander("Aggregations (optional)"):
 # -----------------------------
 with st.expander("Filter Aggregates", expanded=False):
     st.caption("Apply conditions on aggregate results (e.g., SUM(amount) > 1000).")
+    # placeholder-driven having rows (no Add button)
     if "having" not in st.session_state:
-        st.session_state.having = []
-    if st.button("➕ Add filter on aggregate"):
-        # Default to first agg alias if exists
-        default_alias = (agg_rows[0].get("alias") or f"{agg_rows[0]['func'].lower()}_{agg_rows[0]['col'].lower()}") if agg_rows else ""
-        st.session_state.having.append({"target": default_alias, "op": ">", "val": ""})
+        st.session_state.having = [{"id": st.session_state.get("_agg_next_id", 0), "target": "", "op": ">", "val": ""}]
+        st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
 
-    del_h = []
     # Build alias list and map alias -> underlying column for icon inference
     agg_aliases = []
     alias_to_col = {}
@@ -574,33 +571,75 @@ with st.expander("Filter Aggregates", expanded=False):
         agg_aliases.append(alias)
         alias_to_col[alias] = a["col"]
 
-    for i, h in enumerate(st.session_state.having):
-        c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
-        with c1:
-            if agg_aliases:
-                # show icon for the underlying column's data type using format_func
-                target = st.selectbox(
-                    f"Aggregate/alias #{i+1}",
-                    agg_aliases,
-                    key=f"h_target_{i}",
-                    format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}",
-                )
-            else:
-                target = st.text_input(f"Aggregate expr #{i+1}", key=f"h_target_{i}", value=h.get("target", ""))
-        with c2:
-            # Limit ops based on the aggregate target's inferred type
-            ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
-            op_index = ops.index(h["op"]) if h["op"] in ops else 0
-            op = st.selectbox(f"Op #{i+1}", ops, key=f"h_op_{i}", index=op_index)
-        with c3:
-            val = st.text_input(f"Value #{i+1}", value=h.get("val", ""), key=f"h_val_{i}")
-        with c4:
-            if st.button("❌", key=f"h_del_{i}"):
-                del_h.append(i)
-        st.session_state.having[i] = {"target": target if isinstance(target, str) else target, "op": op, "val": val}
-    for idx in sorted(del_h, reverse=True):
-        del st.session_state.having[idx]
-    having = st.session_state.having
+    new_having = list(st.session_state.having)
+    to_remove_h = []
+    for hi, h in enumerate(list(st.session_state.having)):
+        hid = h.get("id", hi)
+        # placeholder: empty target select
+        if not h.get("target"):
+            c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+            with c1:
+                key = f"h_target_{hid}"
+                opts = [""] + agg_aliases if agg_aliases else [""]
+                if key in st.session_state:
+                    tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
+                else:
+                    tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=0, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
+            if tgt and tgt != "":
+                # convert placeholder into full having row and append new placeholder
+                for rr in st.session_state.having:
+                    if rr.get("id") == hid:
+                        rr["target"] = tgt
+                        rr["op"] = ">"
+                        rr["val"] = ""
+                nid = st.session_state.get("_agg_next_id", 0)
+                st.session_state["_agg_next_id"] = nid + 1
+                st.session_state.having.append({"id": nid, "target": "", "op": ">", "val": ""})
+                st.session_state.having = list(st.session_state.having)
+                _safe_rerun()
+        else:
+            # full having row: target (alias), op, val, del
+            c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+            with c1:
+                key = f"h_target_{hid}"
+                if agg_aliases:
+                    if key in st.session_state:
+                        target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                    else:
+                        default_idx = agg_aliases.index(h.get("target")) if h.get("target") in agg_aliases else 0
+                        target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                else:
+                    target = st.text_input(f"Aggregate expr #{hi+1}", key=key, value=h.get("target", ""))
+            with c2:
+                ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
+                op_key = f"h_op_{hid}"
+                if op_key in st.session_state:
+                    op = st.selectbox(f"Op #{hi+1}", ops, key=op_key)
+                else:
+                    op_index = ops.index(h.get("op")) if h.get("op") in ops else 0
+                    op = st.selectbox(f"Op #{hi+1}", ops, index=op_index, key=op_key)
+            with c3:
+                val_key = f"h_val_{hid}"
+                if val_key in st.session_state:
+                    val = st.text_input(f"Value #{hi+1}", key=val_key)
+                else:
+                    val = st.text_input(f"Value #{hi+1}", value=h.get("val", ""), key=val_key)
+            with c4:
+                if st.button("❌", key=f"h_del_{hid}"):
+                    to_remove_h.append(hid)
+            # persist
+            for idx, rr in enumerate(new_having):
+                if rr.get("id") == hid:
+                    new_having[idx] = {"id": hid, "target": target if isinstance(target, str) else target, "op": op, "val": val}
+
+    # apply removals
+    if to_remove_h:
+        st.session_state.having = [r for r in new_having if r.get("id") not in to_remove_h]
+    else:
+        st.session_state.having = new_having
+
+    # expose cleaned having list to downstream code (exclude placeholders)
+    having = [r for r in st.session_state.having if r.get("target")]
 
 # (Filters expander was moved earlier to immediately follow Select columns)
 
