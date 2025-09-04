@@ -48,6 +48,22 @@ def _normalize_cols(df):
     df.columns = [c.strip().strip('"').lower().replace(" ", "_") for c in df.columns]
     return df
 
+def _safe_rerun():
+    """Attempt to trigger a Streamlit rerun in a backwards/forwards-compatible way.
+
+    Some Streamlit versions expose `st.experimental_rerun`, others `st.rerun`. Some
+    environments may not expose either. Calling this helper will try available APIs
+    and otherwise silently continue (preferred to raising AttributeError at runtime).
+    """
+    try:
+        if hasattr(st, "experimental_rerun"):
+            st.experimental_rerun()
+        elif hasattr(st, "rerun"):
+            st.rerun()
+    except Exception:
+        # Best-effort: if rerun APIs are unavailable or fail, do nothing.
+        return
+
 @st.cache_data
 def list_databases() -> list[str]:
     """Return list of databases. Cached to avoid repeated network calls on reruns."""
