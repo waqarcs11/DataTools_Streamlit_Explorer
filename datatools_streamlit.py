@@ -367,9 +367,19 @@ with st.expander("Aggregations (optional)"):
                 )
             with c3:
                 rid = row.get("id", i)
-                # Show alias input; default to current row alias or the generated default
-                default_alias = (row.get("alias") or f"{func.lower()}_{col.lower()}") if col else (row.get("alias") or "")
-                alias_widget_val = st.text_input(f"Alias #{i+1}", value=default_alias, key=f"agg_alias_{rid}")
+                alias_key = f"agg_alias_{rid}"
+                # Compute previous and new generated defaults
+                prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
+                new_default = f"{func.lower()}_{col.lower()}" if col else ""
+                # If the widget does not yet have a stored value, initialize it from the row alias or the new default.
+                if alias_key not in st.session_state:
+                    st.session_state[alias_key] = row.get("alias") or new_default
+                else:
+                    # If the current widget value equals the previous auto-generated default (or empty), update it to the new default
+                    cur_val = st.session_state.get(alias_key, "")
+                    if cur_val == prev_default or cur_val == "":
+                        st.session_state[alias_key] = new_default
+                alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
             with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
