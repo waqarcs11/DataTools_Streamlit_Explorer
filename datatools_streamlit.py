@@ -291,7 +291,6 @@ with st.expander("Aggregations (optional)"):
         st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
 
     # Render agg rows. Rows with empty 'col' are placeholders showing only a column select.
-    to_remove = []
     # First, convert any placeholder selects that already have a selection stored in session_state
     new_rows = list(st.session_state.agg_rows)
     for i, row in enumerate(list(st.session_state.agg_rows)):
@@ -306,10 +305,9 @@ with st.expander("Aggregations (optional)"):
 
     st.session_state.agg_rows = new_rows
 
-    # Now render rows (after conversion)
+    # Now render rows (after conversion). Delete operations are applied immediately to avoid index-shift issues.
     new_rows = list(st.session_state.agg_rows)
     for i, row in enumerate(st.session_state.agg_rows):
-        # placeholder
         if row.get("col", "") == "":
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
@@ -346,12 +344,13 @@ with st.expander("Aggregations (optional)"):
                 alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
             with c4:
                 if st.button("❌", key=f"agg_del_{i}"):
-                    to_remove.append(i)
+                    # delete immediately and rerun to re-render with updated rows
+                    rows = list(st.session_state.agg_rows)
+                    if i < len(rows):
+                        del rows[i]
+                    st.session_state.agg_rows = rows
+                    _safe_rerun()
             new_rows[i] = {"func": func, "col": col, "alias": alias}
-
-    # apply removals
-    for idx in sorted(to_remove, reverse=True):
-        del new_rows[idx]
 
     # ensure a placeholder exists at the end
     if not new_rows or new_rows[-1].get("col", "") != "":
