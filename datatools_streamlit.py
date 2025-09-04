@@ -396,7 +396,8 @@ with st.expander("Aggregations (optional)"):
         new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
 
     st.session_state.agg_rows = new_rows
-    agg_rows = st.session_state.agg_rows
+    # Use a cleaned view of agg_rows (exclude placeholders with empty 'col') for downstream logic
+    agg_rows = [r for r in st.session_state.agg_rows if r.get("col")]
 
 # -----------------------------
 # Filter Aggregates (previously Having)
