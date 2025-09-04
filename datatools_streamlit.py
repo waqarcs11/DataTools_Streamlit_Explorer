@@ -258,8 +258,8 @@ with st.expander("Filters (WHERE)", expanded=False):
     for fi, fil in enumerate(list(st.session_state["filters"])):
         fid = fil.get("id", fi)
         if not fil.get("col"):
-            # placeholder: only column select
-            c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+            # placeholder: only column select (match measure column widths)
+            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             key = f"f_col_{fid}"
             opts = [""] + all_cols
             if key in st.session_state:
@@ -280,8 +280,8 @@ with st.expander("Filters (WHERE)", expanded=False):
                 st.session_state["filters"] = list(st.session_state["filters"])
                 _safe_rerun()
         else:
-            # full filter row
-            c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+            # full filter row (match measure column widths)
+            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
                 key = f"f_col_{fid}"
                 if key in st.session_state:
