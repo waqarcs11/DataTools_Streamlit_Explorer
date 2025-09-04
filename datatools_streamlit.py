@@ -296,16 +296,10 @@ with st.expander("Aggregations (optional)"):
                 new_rows[i] = {"func": func, "col": sel, "alias": f"{func.lower()}_{sel.lower()}"}
                 new_rows.append({"func": "COUNT", "col": "", "alias": ""})
         else:
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                func = st.selectbox(
-                    f"Function #{i+1}",
-                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
-                    key=f"agg_func_{i}",
-                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row["func"]),
-                )
-            with c2:
-                options = all_cols if func in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
+            # Layout: Column | Function | Delete  (alias hidden; preserved or auto-generated)
+            c_col, c_func, c_del = st.columns([3, 2, 1])
+            with c_col:
+                options = all_cols if row.get("func", "COUNT") in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
                 if not options:
                     options = all_cols
                 col = st.selectbox(
@@ -315,11 +309,19 @@ with st.expander("Aggregations (optional)"):
                     index=max(0, options.index(row["col"])) if row["col"] in options else 0,
                     format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
                 )
-            with c3:
-                alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
-            with c4:
+            with c_func:
+                func = st.selectbox(
+                    f"Function #{i+1}",
+                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
+                    key=f"agg_func_{i}",
+                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row.get("func", "COUNT")),
+                )
+            with c_del:
                 if st.button("❌", key=f"agg_del_{i}"):
                     to_remove.append(i)
+            # Determine alias: preserve existing alias if present, otherwise auto-generate
+            existing_alias = row.get("alias", "")
+            alias = existing_alias if existing_alias else f"{func.lower()}_{col.lower()}"
             new_rows[i] = {"func": func, "col": col, "alias": alias}
 
     # apply removals
