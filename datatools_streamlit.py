@@ -367,7 +367,10 @@ with st.expander("Aggregations (optional)"):
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
                 if st.button("❌", key=btn_key):
-                    st.session_state["_agg_delete_id"] = row.get("id", i)
+                    # delete immediately by id and trigger a rerun
+                    rows = [r for r in st.session_state.get("agg_rows", []) if r.get("id") != row.get("id")]
+                    st.session_state["agg_rows"] = rows
+                    _safe_rerun()
             # preserve id when persisting
             new_rows[i] = {"id": row.get("id"), "func": func, "col": col, "alias": alias}
 
@@ -383,9 +386,11 @@ with st.expander("Aggregations (optional)"):
         st.session_state.agg_rows = new_rows
         _safe_rerun()
 
-    # ensure a placeholder exists at the end
+    # ensure a placeholder exists at the end (with a stable id)
     if not new_rows or new_rows[-1].get("col", "") != "":
-        new_rows.append({"func": "COUNT", "col": "", "alias": ""})
+        ph_id = st.session_state.get("_agg_next_id", 0)
+        st.session_state["_agg_next_id"] = ph_id + 1
+        new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
 
     st.session_state.agg_rows = new_rows
     agg_rows = st.session_state.agg_rows
