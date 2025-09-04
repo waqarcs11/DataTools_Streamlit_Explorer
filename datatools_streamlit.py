@@ -335,13 +335,23 @@ with st.expander("Aggregations (optional)"):
             with c1:
                 opts = [""] + all_cols
                 rid = row.get("id", i)
-                sel = st.selectbox(
-                    f"Column #{i+1}",
-                    opts,
-                    key=f"agg_col_{rid}",
-                    index=0,
-                    format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
-                )
+                col_key = f"agg_col_{rid}"
+                # If the widget already has state, avoid forcing index which would override user choice
+                if col_key in st.session_state:
+                    sel = st.selectbox(
+                        f"Column #{i+1}",
+                        opts,
+                        key=col_key,
+                        format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
+                    )
+                else:
+                    sel = st.selectbox(
+                        f"Column #{i+1}",
+                        opts,
+                        index=0,
+                        key=col_key,
+                        format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
+                    )
         else:
             # Layout: Column | Function | Alias | Delete
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
@@ -350,21 +360,39 @@ with st.expander("Aggregations (optional)"):
                 if not options:
                     options = all_cols
                 rid = row.get("id", i)
-                col = st.selectbox(
-                    f"Column #{i+1}",
-                    options,
-                    key=f"agg_col_{rid}",
-                    index=max(0, options.index(row["col"])) if row["col"] in options else 0,
-                    format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-                )
+                col_key = f"agg_col_{rid}"
+                if col_key in st.session_state:
+                    col = st.selectbox(
+                        f"Column #{i+1}",
+                        options,
+                        key=col_key,
+                        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+                    )
+                else:
+                    col = st.selectbox(
+                        f"Column #{i+1}",
+                        options,
+                        index=max(0, options.index(row["col"])) if row["col"] in options else 0,
+                        key=col_key,
+                        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+                    )
             with c2:
                 rid = row.get("id", i)
-                func = st.selectbox(
-                    f"Function #{i+1}",
-                    ["COUNT", "SUM", "AVG", "MIN", "MAX"],
-                    key=f"agg_func_{rid}",
-                    index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row.get("func", "COUNT")),
-                )
+                func_key = f"agg_func_{rid}"
+                func_options = ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+                if func_key in st.session_state:
+                    func = st.selectbox(
+                        f"Function #{i+1}",
+                        func_options,
+                        key=func_key,
+                    )
+                else:
+                    func = st.selectbox(
+                        f"Function #{i+1}",
+                        func_options,
+                        index=func_options.index(row.get("func", "COUNT")),
+                        key=func_key,
+                    )
             with c3:
                 rid = row.get("id", i)
                 alias_key = f"agg_alias_{rid}"
