@@ -287,55 +287,62 @@ with st.expander("Filters (WHERE)", expanded=False):
 with st.expander("Aggregations (optional)"):
     st.caption("Add aggregate measures. If you add any, you can also Group By and use Having.")
     # -----------------------------
-    # Dimensions (new): allow choosing columns to GROUP BY / include in SELECT when present
+    # Dimensions (new): behave like measures - show a placeholder select, convert to full
+    # row on selection and append another placeholder. Dimensions will be used in the
+    # SELECT/GROUP BY when present (and will replace explicit "Select columns").
     # -----------------------------
     st.subheader("Dimensions")
     if "dims" not in st.session_state:
         # each dim is {'id': int, 'col': ''}
-        st.session_state["dims"] = []
+        st.session_state["dims"] = [{"id": st.session_state.get("_agg_next_id", 0), "col": ""}]
+        st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
 
-    # ensure id generator exists
-    if "_agg_next_id" not in st.session_state:
-        st.session_state["_agg_next_id"] = 0
-
-    # Add dimension button
-    if st.button("➕ Add dimension"):
-        nid = st.session_state["_agg_next_id"]
-        st.session_state["_agg_next_id"] += 1
-        st.session_state["dims"].append({"id": nid, "col": ""})
-
-    # render dims rows
-    dim_remove = []
-    for di, d in enumerate(list(st.session_state["dims"])):
+    # render dims (placeholder-driven)
+    dim_to_remove = []
+    dims = list(st.session_state["dims"])
+    for di, d in enumerate(dims):
         rid = d.get("id", di)
-        c1, c2 = st.columns([6, 1])
-        with c1:
-            key = f"dim_col_{rid}"
-            opts = [""] + all_cols
-            # if key already in session_state, let widget keep its value; otherwise prefill
-            if key in st.session_state:
-                sel = st.selectbox(f"Column:", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-            else:
-                sel = st.selectbox(f"Column:", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-        with c2:
-            if st.button("🗑️", key=f"dim_del_{rid}"):
-                dim_remove.append(rid)
-        # persist selection into state list
-        # if selectbox has a value, update stored dims
-        if sel and sel != "":
-            # find and update
-            for rr in st.session_state["dims"]:
-                if rr.get("id") == rid:
-                    rr["col"] = sel
+        if not d.get("col"):
+            # placeholder: show only the column select (keep same column width as agg rows)
+            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+            with c1:
+                key = f"dim_col_{rid}"
+                opts = [""] + all_cols
+                if key in st.session_state:
+                    sel = st.selectbox("Column:", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+                else:
+                    sel = st.selectbox("Column:", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+            # if user selected, convert this placeholder into a real dim and append new placeholder
+            if sel and sel != "":
+                # replace
+                for rr in st.session_state["dims"]:
+                    if rr.get("id") == rid:
+                        rr["col"] = sel
+                # ensure there's a new placeholder appended
+                nid = st.session_state.get("_agg_next_id", 0)
+                st.session_state["_agg_next_id"] = nid + 1
+                st.session_state["dims"].append({"id": nid, "col": ""})
+                # persist and rerun to show delete icon immediately
+                st.session_state["dims"] = list(st.session_state["dims"])
+                _safe_rerun()
         else:
-            for rr in st.session_state["dims"]:
-                if rr.get("id") == rid:
-                    rr["col"] = rr.get("col", "")
+            # full dim row: column + delete
+            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+            with c1:
+                key = f"dim_col_{rid}"
+                if key in st.session_state:
+                    col = st.selectbox("Column:", all_cols, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
+                else:
+                    # preselect current value
+                    default_idx = max(0, all_cols.index(d.get("col"))) if d.get("col") in all_cols else 0
+                    col = st.selectbox("Column:", all_cols, index=default_idx, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
+            with c4:
+                if st.button("❌", key=f"dim_del_{rid}"):
+                    dim_to_remove.append(rid)
 
-    # apply removals
-    if dim_remove:
-        rows = [r for r in st.session_state["dims"] if r.get("id") not in dim_remove]
-        st.session_state["dims"] = rows
+    # apply dim removals
+    if dim_to_remove:
+        st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
 
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
@@ -498,6 +505,9 @@ with st.expander("Aggregations (optional)"):
     st.session_state.agg_rows = new_rows
     # Use a cleaned view of agg_rows (exclude placeholders with empty 'col') for downstream logic
     agg_rows = [r for r in st.session_state.agg_rows if r.get("col")]
+    # Build dimensions list (exclude placeholders). When present, dimensions will be used
+    # in the SELECT and GROUP BY and will replace the main `select_cols` selection.
+    dims = [d["col"] for d in st.session_state.get("dims", []) if d.get("col")]
 
 # -----------------------------
 # Filter Aggregates (previously Having)
@@ -571,8 +581,12 @@ def build_sql() -> str:
     select_parts: List[str] = []
 
     # Plain columns
-    if select_cols:
-        select_parts.extend([f"{q_ident(col)}" for col in select_cols])
+    # If dimensions are present, include them first and ignore the Select columns multiselect
+    if dims:
+        select_parts.extend([f"{q_ident(col)}" for col in dims])
+    else:
+        if select_cols:
+            select_parts.extend([f"{q_ident(col)}" for col in select_cols])
 
     # Aggregates
     for a in agg_rows:
