@@ -263,9 +263,9 @@ with st.expander("Filters (WHERE)", expanded=False):
             key = f"f_col_{fid}"
             opts = [""] + all_cols
             if key in st.session_state:
-                col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}")
+                col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
             else:
-                col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}")
+                col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
             # if selected, convert to full filter and append placeholder
             if col_sel and col_sel != "":
                 # find and update
@@ -285,9 +285,9 @@ with st.expander("Filters (WHERE)", expanded=False):
             with c1:
                 key = f"f_col_{fid}"
                 if key in st.session_state:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}")
+                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
                 else:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, index=max(0, all_cols.index(fil.get("col"))) if fil.get("col") in all_cols else 0, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}")
+                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, index=max(0, all_cols.index(fil.get("col"))) if fil.get("col") in all_cols else 0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
             with c2:
                 dtype = dtype_map.get(col_sel, "")
                 ops = ops_for_dtype(dtype)
@@ -315,7 +315,8 @@ with st.expander("Filters (WHERE)", expanded=False):
         st.session_state["filters"] = [r for r in new_filters if r.get("id") not in to_remove_filters]
     else:
         st.session_state["filters"] = new_filters
-    filters = st.session_state["filters"]
+    # Expose only real filters (exclude placeholders) to downstream logic
+    filters = [r for r in st.session_state["filters"] if r.get("col")]
     # Place filter mode control below the filter rows for better UX
     if "filter_mode" not in st.session_state:
         st.session_state.filter_mode = "AND"
