@@ -310,7 +310,8 @@ with st.expander("Aggregations (optional)"):
     new_rows = list(st.session_state.agg_rows)
     for i, row in enumerate(list(st.session_state.agg_rows)):
         if row.get("col", "") == "":
-            sel_key = f"agg_col_{i}"
+            rid = row.get("id", i)
+            sel_key = f"agg_col_{rid}"
             if sel_key in st.session_state:
                 sel_val = st.session_state.get(sel_key, "")
                 if sel_val and sel_val != "":
@@ -333,10 +334,11 @@ with st.expander("Aggregations (optional)"):
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
                 opts = [""] + all_cols
+                rid = row.get("id", i)
                 sel = st.selectbox(
                     f"Column #{i+1}",
                     opts,
-                    key=f"agg_col_{i}",
+                    key=f"agg_col_{rid}",
                     index=0,
                     format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
                 )
@@ -347,22 +349,25 @@ with st.expander("Aggregations (optional)"):
                 options = all_cols if row.get("func", "COUNT") in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
                 if not options:
                     options = all_cols
+                rid = row.get("id", i)
                 col = st.selectbox(
                     f"Column #{i+1}",
                     options,
-                    key=f"agg_col_{i}",
+                    key=f"agg_col_{rid}",
                     index=max(0, options.index(row["col"])) if row["col"] in options else 0,
                     format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
                 )
             with c2:
+                rid = row.get("id", i)
                 func = st.selectbox(
                     f"Function #{i+1}",
                     ["COUNT", "SUM", "AVG", "MIN", "MAX"],
-                    key=f"agg_func_{i}",
+                    key=f"agg_func_{rid}",
                     index=["COUNT", "SUM", "AVG", "MIN", "MAX"].index(row.get("func", "COUNT")),
                 )
             with c3:
-                alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{i}")
+                rid = row.get("id", i)
+                alias = st.text_input(f"Alias #{i+1}", value=row.get("alias") or f"{func.lower()}_{col.lower()}", key=f"agg_alias_{rid}")
             with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
