@@ -286,28 +286,28 @@ with st.expander("Filters (WHERE)", expanded=False):
         else:
             # full filter row (match measure column widths)
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
+        with c1:
                 key = f"f_col_{fid}"
                 if key in st.session_state:
                     col_sel = st.selectbox(f"Column #{fi+1}", all_cols, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
                 else:
                     col_sel = st.selectbox(f"Column #{fi+1}", all_cols, index=max(0, all_cols.index(fil.get("col"))) if fil.get("col") in all_cols else 0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-            with c2:
+        with c2:
                 dtype = dtype_map.get(col_sel, "")
-                ops = ops_for_dtype(dtype)
+            ops = ops_for_dtype(dtype)
                 op_key = f"f_op_{fid}"
                 if op_key in st.session_state:
                     op_sel = st.selectbox(f"Op #{fi+1}", ops, key=op_key)
                 else:
                     op_sel = st.selectbox(f"Op #{fi+1}", ops, index=ops.index(fil.get("op")) if fil.get("op") in ops else 0, key=op_key)
-            with c3:
+        with c3:
                 val_key = f"f_val_{fid}"
                 show_val = op_sel not in ["IS NULL", "IS NOT NULL"]
                 if val_key in st.session_state:
                     val_sel = st.text_input(f"Value #{fi+1} ({dtype})", key=val_key)
                 else:
                     val_sel = st.text_input(f"Value #{fi+1} ({dtype})", value=fil.get("val", ""), key=val_key) if show_val else ""
-            with c4:
+        with c4:
                 if st.button("❌", key=f"f_del_{fid}"):
                     to_remove_filters.append(fid)
             # persist
@@ -364,8 +364,6 @@ with st.expander("Aggregations (optional)"):
                 if rref.get("id") == rid:
                     rref["col"] = sel
                     break
-            # ensure the widget key for this converted row holds the selected value
-            st.session_state[f"dim_col_{rid}"] = sel
             nid = st.session_state.get("_agg_next_id", 0)
             st.session_state["_agg_next_id"] = nid + 1
             st.session_state["dims"].append({"id": nid, "col": ""})
@@ -376,26 +374,20 @@ with st.expander("Aggregations (optional)"):
             # full row: render delete button in rightmost column
             with c4:
                 if st.button("❌", key=f"dim_del_{rid}"):
-                    # remove widget key and the dim
-                    key_to_del = f"dim_col_{rid}"
-                    if key_to_del in st.session_state:
-                        try:
-                            del st.session_state[key_to_del]
-                        except Exception:
-                            pass
-                    dim_to_remove.append(rid)
+                    # defer deletion: mark id to delete after widget loop
+                    st.session_state["_dim_delete_id"] = rid
 
-    # apply dim removals
-    if dim_to_remove:
-        # remove corresponding widget keys to avoid stale keys mapping to new rows
-        for rid in dim_to_remove:
-            key = f"dim_col_{rid}"
-            if key in st.session_state:
-                try:
-                    del st.session_state[key]
-                except Exception:
-                    pass
-        st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
+    # apply dim deletion if requested
+    if "_dim_delete_id" in st.session_state:
+        del_id = st.session_state.pop("_dim_delete_id")
+        # remove the dim entry and its widget key
+        st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") != del_id]
+        key_del = f"dim_col_{del_id}"
+        if key_del in st.session_state:
+            try:
+                del st.session_state[key_del]
+            except Exception:
+                pass
         _safe_rerun()
 
     # Debug helper: show dim-related session_state for troubleshooting (toggle)
@@ -453,8 +445,8 @@ with st.expander("Aggregations (optional)"):
     st.subheader("Measures")
     for i, row in enumerate(st.session_state.agg_rows):
         if row.get("col", "") == "":
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c1:
                 opts = [""] + all_cols
                 rid = row.get("id", i)
                 col_key = f"agg_col_{rid}"
@@ -479,8 +471,8 @@ with st.expander("Aggregations (optional)"):
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
             with c1:
                 options = all_cols if row.get("func", "COUNT") in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
-                if not options:
-                    options = all_cols
+            if not options:
+                options = all_cols
                 rid = row.get("id", i)
                 col_key = f"agg_col_{rid}"
                 if col_key in st.session_state:
@@ -491,13 +483,13 @@ with st.expander("Aggregations (optional)"):
                         format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
                     )
                 else:
-                    col = st.selectbox(
-                        f"Column #{i+1}",
-                        options,
-                        index=max(0, options.index(row["col"])) if row["col"] in options else 0,
+            col = st.selectbox(
+                f"Column #{i+1}",
+                options,
+                index=max(0, options.index(row["col"])) if row["col"] in options else 0,
                         key=col_key,
-                        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-                    )
+                format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+            )
             with c2:
                 rid = row.get("id", i)
                 func_key = f"agg_func_{rid}"
@@ -514,8 +506,8 @@ with st.expander("Aggregations (optional)"):
                         func_options,
                         index=func_options.index(row.get("func", "COUNT")),
                         key=func_key,
-                    )
-            with c3:
+            )
+        with c3:
                 rid = row.get("id", i)
                 alias_key = f"agg_alias_{rid}"
                 # Auto-update alias logic must run BEFORE the widget is created to avoid Streamlit errors
@@ -532,7 +524,7 @@ with st.expander("Aggregations (optional)"):
                     if cur_val_local == prev_default_local or cur_val_local == "":
                         st.session_state[alias_key] = new_default_local
                 alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
-            with c4:
+        with c4:
                 # use stable id-based keys for delete buttons so clicks map to rows reliably
                 btn_key = f"agg_del_{row.get('id', i)}"
                 if st.button("❌", key=btn_key):
@@ -620,32 +612,32 @@ with st.expander("Filter Aggregates", expanded=False):
                 _safe_rerun()
         else:
             # full having row: target (alias), op, val, del
-            c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
-            with c1:
+        c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
+        with c1:
                 key = f"h_target_{hid}"
-                if agg_aliases:
+            if agg_aliases:
                     if key in st.session_state:
                         target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
                     else:
                         default_idx = agg_aliases.index(h.get("target")) if h.get("target") in agg_aliases else 0
                         target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
-                else:
+            else:
                     target = st.text_input(f"Aggregate expr #{hi+1}", key=key, value=h.get("target", ""))
-            with c2:
-                ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
+        with c2:
+            ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
                 op_key = f"h_op_{hid}"
                 if op_key in st.session_state:
                     op = st.selectbox(f"Op #{hi+1}", ops, key=op_key)
                 else:
                     op_index = ops.index(h.get("op")) if h.get("op") in ops else 0
                     op = st.selectbox(f"Op #{hi+1}", ops, index=op_index, key=op_key)
-            with c3:
+        with c3:
                 val_key = f"h_val_{hid}"
                 if val_key in st.session_state:
                     val = st.text_input(f"Value #{hi+1}", key=val_key)
                 else:
                     val = st.text_input(f"Value #{hi+1}", value=h.get("val", ""), key=val_key)
-            with c4:
+        with c4:
                 if st.button("❌", key=f"h_del_{hid}"):
                     to_remove_h.append(hid)
             # persist
@@ -689,8 +681,8 @@ def build_sql() -> str:
     if dims:
         select_parts.extend([f"{q_ident(col)}" for col in dims])
     else:
-        if select_cols:
-            select_parts.extend([f"{q_ident(col)}" for col in select_cols])
+    if select_cols:
+        select_parts.extend([f"{q_ident(col)}" for col in select_cols])
 
     # Aggregates
     for a in agg_rows:
