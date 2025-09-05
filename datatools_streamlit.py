@@ -248,7 +248,7 @@ with st.expander("Filters (WHERE)", expanded=False):
     st.caption("Build row-level filters. For IN, comma-separate values.")
     # Ensure filters list exists and uses stable ids
     if "filters" not in st.session_state:
-        st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "=", "val": ""}]
+        st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "", "val": ""}]
         st.session_state["_filter_next_id"] = st.session_state.get("_filter_next_id", 0) + 1
 
     # If any placeholder already has a widget value (user selected a column on previous run),
@@ -259,11 +259,12 @@ with st.expander("Filters (WHERE)", expanded=False):
             k = f"f_col_{fr['id']}"
             if k in st.session_state and st.session_state.get(k):
                 fr["col"] = st.session_state.get(k)
-                fr["op"] = "="
+                # leave op empty so the user selects it first time
+                fr["op"] = ""
                 fr["val"] = ""
                 nid = st.session_state.get("_filter_next_id", 0)
                 st.session_state["_filter_next_id"] = nid + 1
-                st.session_state["filters"].append({"id": nid, "col": "", "op": "=", "val": ""})
+                st.session_state["filters"].append({"id": nid, "col": "", "op": "", "val": ""})
                 converted = True
     if converted:
         st.session_state["filters"] = list(st.session_state["filters"])
@@ -311,8 +312,10 @@ with st.expander("Filters (WHERE)", expanded=False):
             val_sel = st.text_input(f"Value #{idx+1} ({dtype})", value=st.session_state.get(key_val, ""), key=key_val) if show_val else ""
 
         with c4:
-            if st.button("❌", key=f"f_del_{fid}"):
-                st.session_state["_filter_delete_id"] = fid
+            # hide delete button for the first placeholder row (cannot be removed)
+            if fr.get("col"):
+                if st.button("❌", key=f"f_del_{fid}"):
+                    st.session_state["_filter_delete_id"] = fid
 
         # persist current widget values into new_filters
         for j, nf in enumerate(new_filters):
