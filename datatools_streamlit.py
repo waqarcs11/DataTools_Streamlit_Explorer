@@ -338,37 +338,39 @@ with st.expander("Aggregations (optional)"):
         st.session_state["dims"] = [{"id": st.session_state.get("_agg_next_id", 0), "col": ""}]
         st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
 
-    # render dims (placeholder-driven) - do not overwrite existing widget keys
+    # render dims (placeholder-driven) - simplified reliable flow
     dim_to_remove = []
-    dims = list(st.session_state["dims"])
-    pending_new = []
-    for di, d in enumerate(dims):
-        rid = d.get("id", di)
+    dims = st.session_state["dims"]
+    # ensure widget keys reflect current dims before rendering
+    for rr in dims:
+        key_init = f"dim_col_{rr['id']}"
+        if key_init not in st.session_state:
+            st.session_state[key_init] = rr.get("col", "") or ""
+
+    for di, rr in enumerate(list(dims)):
+        rid = rr.get("id")
         key = f"dim_col_{rid}"
         opts = [""] + all_cols
-        if not d.get("col"):
-            # placeholder: render select in leftmost col
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                # render selectbox; do not pre-initialize/overwrite st.session_state[key]
-                if key in st.session_state:
-                    sel = st.selectbox(f"Column #{di+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-                else:
-                    sel = st.selectbox(f"Column #{di+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-            # if user has selected a real value for this placeholder, we'll convert after loop
-            cur_val = st.session_state.get(key, "")
-            if cur_val and cur_val != "":
-                pending_new.append((rid, cur_val))
+        # render select in leftmost column to match other rows
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c1:
+            # use the keyed selectbox so Streamlit preserves the visible value
+            sel = st.selectbox(f"Column #{di+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+        # if this was a placeholder and user selected a value, convert now
+        if not rr.get("col") and sel and sel != "":
+            # update dims in-place and append placeholder
+            for rref in st.session_state["dims"]:
+                if rref.get("id") == rid:
+                    rref["col"] = sel
+                    break
+            nid = st.session_state.get("_agg_next_id", 0)
+            st.session_state["_agg_next_id"] = nid + 1
+            st.session_state["dims"].append({"id": nid, "col": ""})
+            # initialize new widget key
+            st.session_state[f"dim_col_{nid}"] = ""
+            _safe_rerun()
         else:
-            # full dim row: column + delete
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                # render select with current value; do not overwrite existing widget state
-                if key in st.session_state:
-                    col = st.selectbox("Column:", all_cols, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
-                else:
-                    default_idx = max(0, all_cols.index(d.get("col"))) if d.get("col") in all_cols else 0
-                    col = st.selectbox("Column:", all_cols, index=default_idx, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
+            # full row: render delete button in rightmost column
             with c4:
                 if st.button("❌", key=f"dim_del_{rid}"):
                     dim_to_remove.append(rid)
@@ -376,23 +378,6 @@ with st.expander("Aggregations (optional)"):
     # apply dim removals
     if dim_to_remove:
         st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
-
-    # apply any pending placeholder selections (convert placeholders into real dims)
-    if pending_new:
-        for rid, val in pending_new:
-            for rr in st.session_state["dims"]:
-                if rr.get("id") == rid:
-                    rr["col"] = val
-                    break
-            nid = st.session_state.get("_agg_next_id", 0)
-            st.session_state["_agg_next_id"] = nid + 1
-            st.session_state["dims"].append({"id": nid, "col": ""})
-        # ensure widget keys exist for new placeholder
-        for rr in st.session_state["dims"]:
-            k = f"dim_col_{rr.get('id')}"
-            if k not in st.session_state:
-                st.session_state[k] = rr.get("col") or ""
-        _safe_rerun()
 
     # Debug helper: show dim-related session_state for troubleshooting (toggle)
     try:
