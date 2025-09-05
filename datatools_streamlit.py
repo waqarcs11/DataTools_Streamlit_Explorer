@@ -341,6 +341,13 @@ with st.expander("Aggregations (optional)"):
     # render dims (placeholder-driven)
     dim_to_remove = []
     dims = list(st.session_state["dims"])
+    # Ensure selectbox session_state keys are synchronized with the dims list BEFORE rendering
+    for dd in dims:
+        rid_sync = dd.get("id")
+        key_sync = f"dim_col_{rid_sync}"
+        # initialize the widget state to match the dims entry (empty string for placeholder)
+        if key_sync not in st.session_state or st.session_state.get(key_sync) != (dd.get("col") or ""):
+            st.session_state[key_sync] = dd.get("col") or ""
     for di, d in enumerate(dims):
         rid = d.get("id", di)
         if not d.get("col"):
@@ -400,6 +407,11 @@ with st.expander("Aggregations (optional)"):
     if processed:
         # Persist and rerun once after applying all deferred conversions
         st.session_state["dims"] = list(st.session_state["dims"])
+        # Sync selectbox session_state keys to the dims list so widgets show correct values
+        for rr in st.session_state["dims"]:
+            key = f"dim_col_{rr.get('id')}"
+            # ensure a key exists for each dim (placeholder gets empty string)
+            st.session_state[key] = rr.get("col") or ""
         _safe_rerun()
 
     # Debug helper: show dim-related session_state for troubleshooting (toggle)
