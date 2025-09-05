@@ -272,13 +272,29 @@ with st.expander("Filters (WHERE)", expanded=False):
     # If a delete was requested previously, apply it now (before creating widgets) to avoid key collisions
     if "_filter_delete_id" in st.session_state:
         del_id = st.session_state.pop("_filter_delete_id")
+        # remove the filter entry
         st.session_state["filters"] = [f for f in st.session_state["filters"] if f.get("id") != del_id]
-        for key in [f"f_col_{del_id}", f"f_op_{del_id}", f"f_val_{del_id}"]:
-            if key in st.session_state:
+        # Rebuild widget keys for remaining filters to ensure they map to the correct values
+        remaining_ids = {f.get("id") for f in st.session_state["filters"]}
+        # Remove stale widget keys that don't belong to remaining ids
+        for k in list(st.session_state.keys()):
+            if k.startswith("f_col_") or k.startswith("f_op_") or k.startswith("f_val_"):
                 try:
-                    del st.session_state[key]
+                    parts = k.split("_")
+                    kid = int(parts[-1])
                 except Exception:
-                    pass
+                    continue
+                if kid not in remaining_ids:
+                    try:
+                        del st.session_state[k]
+                    except Exception:
+                        pass
+        # Ensure widget keys for remaining rows reflect the stored values
+        for fr in st.session_state["filters"]:
+            fid = fr.get("id")
+            st.session_state[f"f_col_{fid}"] = fr.get("col") or ""
+            st.session_state[f"f_op_{fid}"] = fr.get("op") or ""
+            st.session_state[f"f_val_{fid}"] = fr.get("val") or ""
 
     # Render filter rows using stable keys; initialize widget keys from state before widget instantiation
     new_filters = list(st.session_state["filters"])
