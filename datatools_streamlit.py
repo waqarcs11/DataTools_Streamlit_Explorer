@@ -247,78 +247,77 @@ with st.expander("Select columns", expanded=True):
 # Place Filters expander directly after Select columns per UX request
 with st.expander("Filters (WHERE)", expanded=False):
     st.caption("Build row-level filters. For IN, comma-separate values.")
-    # Convert Filters to placeholder-driven rows like Aggregations/Dims
     if "filters" not in st.session_state:
-        # each filter: {id, col, op, val}
         st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "=", "val": ""}]
         st.session_state["_filter_next_id"] = st.session_state.get("_filter_next_id", 0) + 1
 
-    # Render placeholder-driven filters
     to_remove_filters = []
     new_filters = list(st.session_state["filters"])
     for fi, fil in enumerate(list(st.session_state["filters"])):
         fid = fil.get("id", fi)
-        if not fil.get("col"):
-            # placeholder: only column select (match measure column widths)
-            # Render the placeholder select in the leftmost column with a label so it
-            # aligns exactly like full filter rows.
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                key = f"f_col_{fid}"
-                opts = [""] + all_cols
-                if key in st.session_state:
-                    col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-                else:
-                    col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-            # if selected, convert to full filter and append placeholder
-            if col_sel and col_sel != "":
-                # find and update
-                for rr in st.session_state["filters"]:
-                    if rr.get("id") == fid:
-                        rr["col"] = col_sel
-                        rr["op"] = "="
-                        rr["val"] = ""
-                nid = st.session_state.get("_filter_next_id", 0)
-                st.session_state["_filter_next_id"] = nid + 1
-                st.session_state["filters"].append({"id": nid, "col": "", "op": "=", "val": ""})
-                st.session_state["filters"] = list(st.session_state["filters"])
-                _safe_rerun()
-        else:
-            # full filter row (match measure column widths)
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        # layout matches measures: Column | Op | Value | Delete
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        # Column select
         with c1:
-                key = f"f_col_{fid}"
-                if key in st.session_state:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-                else:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, index=max(0, all_cols.index(fil.get("col"))) if fil.get("col") in all_cols else 0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+            key = f"f_col_{fid}"
+            opts = [""] + all_cols
+            if key in st.session_state:
+                col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+            else:
+                col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+
+        # If this was a placeholder and the user selected a column, convert to full row and append placeholder
+        if not fil.get("col") and col_sel and col_sel != "":
+            for rr in st.session_state["filters"]:
+                if rr.get("id") == fid:
+                    rr["col"] = col_sel
+                    rr["op"] = "="
+                    rr["val"] = ""
+            nid = st.session_state.get("_filter_next_id", 0)
+            st.session_state["_filter_next_id"] = nid + 1
+            st.session_state["filters"].append({"id": nid, "col": "", "op": "=", "val": ""})
+            st.session_state["filters"] = list(st.session_state["filters"])
+            _safe_rerun()
+            continue
+
+        # Op select
         with c2:
-                dtype = dtype_map.get(col_sel, "")
+            dtype = dtype_map.get(col_sel, "")
             ops = ops_for_dtype(dtype)
-                op_key = f"f_op_{fid}"
-                if op_key in st.session_state:
-                    op_sel = st.selectbox(f"Op #{fi+1}", ops, key=op_key)
-                else:
-                    op_sel = st.selectbox(f"Op #{fi+1}", ops, index=ops.index(fil.get("op")) if fil.get("op") in ops else 0, key=op_key)
+            op_key = f"f_op_{fid}"
+            if op_key in st.session_state:
+                op_sel = st.selectbox(f"Op #{fi+1}", ops, key=op_key)
+            else:
+                op_sel = st.selectbox(f"Op #{fi+1}", ops, index=ops.index(fil.get("op")) if fil.get("op") in ops else 0, key=op_key)
+
+        # Value input
         with c3:
-                val_key = f"f_val_{fid}"
-                show_val = op_sel not in ["IS NULL", "IS NOT NULL"]
+            val_key = f"f_val_{fid}"
+            show_val = op_sel not in ["IS NULL", "IS NOT NULL"]
+            if show_val:
                 if val_key in st.session_state:
                     val_sel = st.text_input(f"Value #{fi+1} ({dtype})", key=val_key)
                 else:
-                    val_sel = st.text_input(f"Value #{fi+1} ({dtype})", value=fil.get("val", ""), key=val_key) if show_val else ""
+                    val_sel = st.text_input(f"Value #{fi+1} ({dtype})", value=fil.get("val", ""), key=val_key)
+            else:
+                val_sel = ""
+
+        # Delete
         with c4:
-                if st.button("❌", key=f"f_del_{fid}"):
-                    to_remove_filters.append(fid)
-            # persist
-            for idx, rr in enumerate(new_filters):
-                if rr.get("id") == fid:
-                    new_filters[idx] = {"id": fid, "col": col_sel, "op": op_sel, "val": val_sel}
+            if st.button("❌", key=f"f_del_{fid}"):
+                to_remove_filters.append(fid)
+
+        # persist
+        for idx, rr in enumerate(new_filters):
+            if rr.get("id") == fid:
+                new_filters[idx] = {"id": fid, "col": col_sel, "op": op_sel, "val": val_sel}
+
     # apply removals
     if to_remove_filters:
         st.session_state["filters"] = [r for r in new_filters if r.get("id") not in to_remove_filters]
     else:
         st.session_state["filters"] = new_filters
+
     # Expose only real filters (exclude placeholders) to downstream logic
     filters = [r for r in st.session_state["filters"] if r.get("col")]
     # Place filter mode control below the filter rows for better UX
