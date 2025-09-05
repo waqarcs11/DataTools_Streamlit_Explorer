@@ -402,6 +402,14 @@ with st.expander("Aggregations (optional)"):
         st.session_state["dims"] = list(st.session_state["dims"])
         _safe_rerun()
 
+    # Debug helper: show dim-related session_state for troubleshooting (toggle)
+    try:
+        if st.checkbox("Show dims debug", key="_show_dims_debug"):
+            dbg = {k: v for k, v in st.session_state.items() if k.startswith("dim_col_") or k.startswith("_dim_set_") or k == "dims"}
+            st.json(dbg)
+    except Exception:
+        pass
+
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
         st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
