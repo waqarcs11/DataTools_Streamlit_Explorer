@@ -246,79 +246,81 @@ with st.expander("Select columns", expanded=True):
 # Place Filters expander directly after Select columns per UX request
 with st.expander("Filters (WHERE)", expanded=False):
     st.caption("Build row-level filters. For IN, comma-separate values.")
-    # Convert Filters to placeholder-driven rows like Aggregations/Dims
+    # Ensure filters list exists and uses stable ids
     if "filters" not in st.session_state:
-        # each filter: {id, col, op, val}
         st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "=", "val": ""}]
         st.session_state["_filter_next_id"] = st.session_state.get("_filter_next_id", 0) + 1
 
-    # Render placeholder-driven filters
-    to_remove_filters = []
-    new_filters = list(st.session_state["filters"])
-    for fi, fil in enumerate(list(st.session_state["filters"])):
-        fid = fil.get("id", fi)
-        if not fil.get("col"):
-            # placeholder: only column select (match measure column widths)
-            # Render the placeholder select in the leftmost column with a label so it
-            # aligns exactly like full filter rows.
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                key = f"f_col_{fid}"
-                opts = [""] + all_cols
-                if key in st.session_state:
-                    col_sel = st.selectbox(f"Column #{fi+1}", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-                else:
-                    col_sel = st.selectbox(f"Column #{fi+1}", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-            # if selected, convert to full filter and append placeholder
-            if col_sel and col_sel != "":
-                # find and update
-                for rr in st.session_state["filters"]:
-                    if rr.get("id") == fid:
-                        rr["col"] = col_sel
-                        rr["op"] = "="
-                        rr["val"] = ""
+    # If any placeholder already has a widget value (user selected a column on previous run),
+    # convert it now into a real filter and append a new placeholder before rendering widgets.
+    converted = False
+    for fr in list(st.session_state["filters"]):
+        if not fr.get("col"):
+            k = f"f_col_{fr['id']}"
+            if k in st.session_state and st.session_state.get(k):
+                fr["col"] = st.session_state.get(k)
+                fr["op"] = "="
+                fr["val"] = ""
                 nid = st.session_state.get("_filter_next_id", 0)
                 st.session_state["_filter_next_id"] = nid + 1
                 st.session_state["filters"].append({"id": nid, "col": "", "op": "=", "val": ""})
-                st.session_state["filters"] = list(st.session_state["filters"])
-                _safe_rerun()
-        else:
-            # full filter row (match measure column widths)
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                key = f"f_col_{fid}"
-                if key in st.session_state:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-                else:
-                    col_sel = st.selectbox(f"Column #{fi+1}", all_cols, index=max(0, all_cols.index(fil.get("col"))) if fil.get("col") in all_cols else 0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
-            with c2:
-                dtype = dtype_map.get(col_sel, "")
-                ops = ops_for_dtype(dtype)
-                op_key = f"f_op_{fid}"
-                if op_key in st.session_state:
-                    op_sel = st.selectbox(f"Op #{fi+1}", ops, key=op_key)
-                else:
-                    op_sel = st.selectbox(f"Op #{fi+1}", ops, index=ops.index(fil.get("op")) if fil.get("op") in ops else 0, key=op_key)
-            with c3:
-                val_key = f"f_val_{fid}"
-                show_val = op_sel not in ["IS NULL", "IS NOT NULL"]
-                if val_key in st.session_state:
-                    val_sel = st.text_input(f"Value #{fi+1} ({dtype})", key=val_key)
-                else:
-                    val_sel = st.text_input(f"Value #{fi+1} ({dtype})", value=fil.get("val", ""), key=val_key) if show_val else ""
-            with c4:
-                if st.button("❌", key=f"f_del_{fid}"):
-                    to_remove_filters.append(fid)
-            # persist
-            for idx, rr in enumerate(new_filters):
-                if rr.get("id") == fid:
-                    new_filters[idx] = {"id": fid, "col": col_sel, "op": op_sel, "val": val_sel}
-    # apply removals
-    if to_remove_filters:
-        st.session_state["filters"] = [r for r in new_filters if r.get("id") not in to_remove_filters]
-    else:
-        st.session_state["filters"] = new_filters
-    # Expose only real filters (exclude placeholders) to downstream logic
+                converted = True
+    if converted:
+        st.session_state["filters"] = list(st.session_state["filters"])
+
+    # If a delete was requested previously, apply it now (before creating widgets) to avoid key collisions
+    if "_filter_delete_id" in st.session_state:
+        del_id = st.session_state.pop("_filter_delete_id")
+        st.session_state["filters"] = [f for f in st.session_state["filters"] if f.get("id") != del_id]
+        for key in [f"f_col_{del_id}", f"f_op_{del_id}", f"f_val_{del_id}"]:
+            if key in st.session_state:
+                try:
+                    del st.session_state[key]
+                except Exception:
+                    pass
+
+    # Render filter rows using stable keys; initialize widget keys from state before widget instantiation
+    new_filters = list(st.session_state["filters"])
+    for idx, fr in enumerate(list(st.session_state["filters"])):
+        fid = fr["id"]
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c1:
+            key_col = f"f_col_{fid}"
+            if key_col not in st.session_state:
+                st.session_state[key_col] = fr.get("col", "") or ""
+            col_sel = st.selectbox(f"Column #{idx+1}", [""] + all_cols, key=key_col, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
+
+        # If this row was a placeholder and the user just selected a column, the conversion already happened above and we triggered a rerun,
+        # so skip rendering op/value for this pass.
+        if not fr.get("col") and col_sel and col_sel != "":
+            continue
+
+        with c2:
+            key_op = f"f_op_{fid}"
+            dtype = dtype_map.get(col_sel, "")
+            ops = ops_for_dtype(dtype)
+            if key_op not in st.session_state:
+                st.session_state[key_op] = fr.get("op", ops[0] if ops else "=")
+            op_sel = st.selectbox(f"Op #{idx+1}", ops, key=key_op)
+
+        with c3:
+            key_val = f"f_val_{fid}"
+            show_val = op_sel not in ["IS NULL", "IS NOT NULL"]
+            if key_val not in st.session_state:
+                st.session_state[key_val] = fr.get("val", "")
+            val_sel = st.text_input(f"Value #{idx+1} ({dtype})", value=st.session_state.get(key_val, ""), key=key_val) if show_val else ""
+
+        with c4:
+            if st.button("❌", key=f"f_del_{fid}"):
+                st.session_state["_filter_delete_id"] = fid
+
+        # persist current widget values into new_filters
+        for j, nf in enumerate(new_filters):
+            if nf.get("id") == fid:
+                new_filters[j] = {"id": fid, "col": col_sel, "op": op_sel, "val": val_sel}
+
+    # persist
+    st.session_state["filters"] = new_filters
     filters = [r for r in st.session_state["filters"] if r.get("col")]
     # Place filter mode control below the filter rows for better UX
     if "filter_mode" not in st.session_state:
