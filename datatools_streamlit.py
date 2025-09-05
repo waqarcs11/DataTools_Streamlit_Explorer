@@ -4,6 +4,7 @@
 import streamlit as st
 import pandas as pd
 from typing import List, Dict, Optional
+import uuid
 
 st.set_page_config(page_title="DataTools: Visual SQL Builder", layout="wide")
 st.title("Visual SQL Builder for Snowflake.")
@@ -363,16 +364,25 @@ with st.expander("Aggregations (optional)"):
                 if rref.get("id") == rid:
                     rref["col"] = sel
                     break
+            # ensure the widget key for this converted row holds the selected value
+            st.session_state[f"dim_col_{rid}"] = sel
             nid = st.session_state.get("_agg_next_id", 0)
             st.session_state["_agg_next_id"] = nid + 1
             st.session_state["dims"].append({"id": nid, "col": ""})
-            # initialize new widget key
+            # initialize new placeholder widget key
             st.session_state[f"dim_col_{nid}"] = ""
             _safe_rerun()
         else:
             # full row: render delete button in rightmost column
             with c4:
                 if st.button("❌", key=f"dim_del_{rid}"):
+                    # remove widget key and the dim
+                    key_to_del = f"dim_col_{rid}"
+                    if key_to_del in st.session_state:
+                        try:
+                            del st.session_state[key_to_del]
+                        except Exception:
+                            pass
                     dim_to_remove.append(rid)
 
     # apply dim removals
