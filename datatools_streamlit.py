@@ -329,7 +329,9 @@ with st.expander("Filters (WHERE)", expanded=False):
             # hide delete button for the first placeholder row (cannot be removed)
             if fr.get("col"):
                 if st.button("❌", key=f"f_del_{fid}"):
+                    # mark delete and trigger an immediate rerun so removal is applied now
                     st.session_state["_filter_delete_id"] = fid
+                    _safe_rerun()
 
         # persist current widget values into new_filters
         for j, nf in enumerate(new_filters):
