@@ -377,7 +377,16 @@ with st.expander("Aggregations (optional)"):
 
     # apply dim removals
     if dim_to_remove:
+        # remove corresponding widget keys to avoid stale keys mapping to new rows
+        for rid in dim_to_remove:
+            key = f"dim_col_{rid}"
+            if key in st.session_state:
+                try:
+                    del st.session_state[key]
+                except Exception:
+                    pass
         st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
+        _safe_rerun()
 
     # Debug helper: show dim-related session_state for troubleshooting (toggle)
     try:
