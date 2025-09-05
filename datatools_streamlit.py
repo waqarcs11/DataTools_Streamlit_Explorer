@@ -307,9 +307,8 @@ with st.expander("Filters (WHERE)", expanded=False):
                 st.session_state[key_col] = fr.get("col", "") or ""
             col_sel = st.selectbox(f"Column #{idx+1}", [""] + all_cols, key=key_col, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')),'')} {x}" if x else ""))
 
-        # If this row was a placeholder and the user just selected a column, the conversion already happened above and we triggered a rerun,
-        # so skip rendering op/value for this pass.
-        if not fr.get("col") and col_sel and col_sel != "":
+        # If this row is still a placeholder (no column selected in state), hide Op and Value
+        if not fr.get("col"):
             continue
 
         with c2:
