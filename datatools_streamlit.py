@@ -248,7 +248,7 @@ with st.expander("Filters (WHERE)", expanded=False):
     st.caption("Build row-level filters. For IN, comma-separate values.")
     # Ensure filters list exists and uses stable ids
     if "filters" not in st.session_state:
-        st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "", "val": ""}]
+        st.session_state["filters"] = [{"id": st.session_state.get("_filter_next_id", 0), "col": "", "op": "=", "val": ""}]
         st.session_state["_filter_next_id"] = st.session_state.get("_filter_next_id", 0) + 1
 
     # If any placeholder already has a widget value (user selected a column on previous run),
@@ -259,8 +259,7 @@ with st.expander("Filters (WHERE)", expanded=False):
             k = f"f_col_{fr['id']}"
             if k in st.session_state and st.session_state.get(k):
                 fr["col"] = st.session_state.get(k)
-                # leave op empty so the user selects it first time
-                fr["op"] = ""
+                fr["op"] = "="
                 fr["val"] = ""
                 nid = st.session_state.get("_filter_next_id", 0)
                 st.session_state["_filter_next_id"] = nid + 1
