@@ -353,19 +353,10 @@ with st.expander("Aggregations (optional)"):
                     sel = st.selectbox("Column:", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
                 else:
                     sel = st.selectbox("Column:", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-            # if user selected, convert this placeholder into a real dim and append new placeholder
+            # if user selected, record the selection to convert after rendering loop
             if sel and sel != "":
-                # replace
-                for rr in st.session_state["dims"]:
-                    if rr.get("id") == rid:
-                        rr["col"] = sel
-                # ensure there's a new placeholder appended
-                nid = st.session_state.get("_agg_next_id", 0)
-                st.session_state["_agg_next_id"] = nid + 1
-                st.session_state["dims"].append({"id": nid, "col": ""})
-                # persist and rerun to show delete icon immediately
-                st.session_state["dims"] = list(st.session_state["dims"])
-                _safe_rerun()
+                # Defer conversion to avoid widget key/state races; store intent in session_state
+                st.session_state[f"_dim_set_{rid}"] = sel
         else:
             # full dim row: column + delete
             c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
@@ -384,6 +375,32 @@ with st.expander("Aggregations (optional)"):
     # apply dim removals
     if dim_to_remove:
         st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
+
+    # Process any deferred dim selections recorded during rendering
+    processed = False
+    for k in list(st.session_state.keys()):
+        if k.startswith("_dim_set_"):
+            try:
+                rid = int(k.split("_dim_set_")[1])
+            except Exception:
+                continue
+            sel_val = st.session_state.pop(k)
+            # apply the selection to the dims list
+            updated = False
+            for rr in st.session_state["dims"]:
+                if rr.get("id") == rid:
+                    rr["col"] = sel_val
+                    updated = True
+                    break
+            if updated:
+                nid = st.session_state.get("_agg_next_id", 0)
+                st.session_state["_agg_next_id"] = nid + 1
+                st.session_state["dims"].append({"id": nid, "col": ""})
+                processed = True
+    if processed:
+        # Persist and rerun once after applying all deferred conversions
+        st.session_state["dims"] = list(st.session_state["dims"])
+        _safe_rerun()
 
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
