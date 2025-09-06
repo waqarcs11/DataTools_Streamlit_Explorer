@@ -360,44 +360,40 @@ with st.expander("Aggregations (optional)"):
         st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
 
     # render dims (placeholder-driven)
-    dim_to_remove = []
-    dims = list(st.session_state["dims"])
-    for di, d in enumerate(dims):
-        rid = d.get("id", di)
+    # 1) Pre-convert any placeholder where a widget key already holds a value (do this BEFORE rendering widgets)
+    converted = False
+    for d in list(st.session_state.get("dims", [])):
         if not d.get("col"):
-            # placeholder: show only the column select (keep same column width as agg rows)
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                key = f"dim_col_{rid}"
-                opts = [""] + all_cols
-                if key in st.session_state:
-                    sel = st.selectbox("Column:", opts, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-                else:
-                    sel = st.selectbox("Column:", opts, index=0, key=key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
-            # if user selected, convert this placeholder into a real dim and append new placeholder
-            if sel and sel != "":
-                # replace
-                for rr in st.session_state["dims"]:
-                    if rr.get("id") == rid:
-                        rr["col"] = sel
-                # ensure there's a new placeholder appended
+            key = f"dim_col_{d['id']}"
+            if key in st.session_state and st.session_state.get(key):
+                # convert this placeholder into a real dim
+                d["col"] = st.session_state.get(key)
                 nid = st.session_state.get("_agg_next_id", 0)
                 st.session_state["_agg_next_id"] = nid + 1
                 st.session_state["dims"].append({"id": nid, "col": ""})
-                # persist and rerun to show delete icon immediately
-                st.session_state["dims"] = list(st.session_state["dims"])
-                _safe_rerun()
-        else:
-            # full dim row: column + delete
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                key = f"dim_col_{rid}"
-                if key in st.session_state:
-                    col = st.selectbox("Column:", all_cols, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
-                else:
-                    # preselect current value
-                    default_idx = max(0, all_cols.index(d.get("col"))) if d.get("col") in all_cols else 0
-                    col = st.selectbox("Column:", all_cols, index=default_idx, key=key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
+                converted = True
+    if converted:
+        st.session_state["dims"] = list(st.session_state["dims"])
+
+    # 2) Initialize widget keys for dims from state (before creating widgets)
+    for d in st.session_state.get("dims", []):
+        k = f"dim_col_{d['id']}"
+        if k not in st.session_state:
+            st.session_state[k] = d.get("col", "") or ""
+
+    # 3) Render dims using stable keys; conversion will be picked up on next rerun
+    dim_to_remove = []
+    for di, d in enumerate(list(st.session_state.get("dims", []))):
+        rid = d.get("id", di)
+        k = f"dim_col_{rid}"
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c1:
+            sel = st.selectbox("Column:", [""] + all_cols, key=k, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+        # if this is a placeholder and user selected, the value is stored in widget key and will be
+        # converted at the top of this block on the next rerun; skip showing delete now
+        if not d.get("col") and sel and sel != "":
+            continue
+        if d.get("col"):
             with c4:
                 if st.button("❌", key=f"dim_del_{rid}"):
                     dim_to_remove.append(rid)
