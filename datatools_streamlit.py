@@ -429,146 +429,111 @@ with st.expander("Aggregations (optional)"):
 
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
-        st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
+        st.session_state.agg_rows = [{"id": st.session_state.get("_agg_next_id", 0), "func": "COUNT", "col": "", "alias": ""}]
+        st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
     # ensure we have a per-row id generator to reliably identify rows across reruns
     if "_agg_next_id" not in st.session_state:
         st.session_state["_agg_next_id"] = 0
-    # backfill missing ids for any pre-existing rows (for older saved state)
-    updated = False
-    rows_with_ids = []
-    for r in st.session_state.agg_rows:
-        if "id" not in r:
-            r_id = st.session_state["_agg_next_id"]
-            st.session_state["_agg_next_id"] += 1
-            r["id"] = r_id
-            updated = True
-        rows_with_ids.append(r)
-    if updated:
-        st.session_state.agg_rows = rows_with_ids
 
-    # Render agg rows. Rows with empty 'col' are placeholders showing only a column select.
-    # First, convert any placeholder selects that already have a selection stored in session_state
-    new_rows = list(st.session_state.agg_rows)
-    for i, row in enumerate(list(st.session_state.agg_rows)):
-        if row.get("col", "") == "":
-            rid = row.get("id", i)
-            sel_key = f"agg_col_{rid}"
-            if sel_key in st.session_state:
-                sel_val = st.session_state.get(sel_key, "")
-                if sel_val and sel_val != "":
-                    func = "COUNT"
-                    # assign a stable id for this converted row
-                    r_id = st.session_state["_agg_next_id"]
-                    st.session_state["_agg_next_id"] += 1
-                    new_rows[i] = {"id": r_id, "func": func, "col": sel_val, "alias": f"{func.lower()}_{sel_val.lower()}"}
-                    # append a new placeholder with its own id
-                    ph_id = st.session_state["_agg_next_id"]
-                    st.session_state["_agg_next_id"] += 1
-                    new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
+    # 1) Convert any placeholder where the widget key already holds a value (do this BEFORE rendering widgets)
+    converted = False
+    for r in list(st.session_state.get("agg_rows", [])):
+        if not r.get("col"):
+            k = f"agg_col_{r['id']}"
+            if k in st.session_state and st.session_state.get(k):
+                r["col"] = st.session_state.get(k)
+                r["func"] = "COUNT"
+                r["alias"] = f"{r['func'].lower()}_{r['col'].lower()}"
+                nid = st.session_state.get("_agg_next_id", 0)
+                st.session_state["_agg_next_id"] = nid + 1
+                st.session_state["agg_rows"].append({"id": nid, "func": "COUNT", "col": "", "alias": ""})
+                converted = True
+    if converted:
+        st.session_state["agg_rows"] = list(st.session_state["agg_rows"])
 
-    st.session_state.agg_rows = new_rows
+    # 2) If a delete was requested previously, apply it now (before creating widgets) to avoid key collisions
+    if "_agg_delete_id" in st.session_state:
+        del_id = st.session_state.pop("_agg_delete_id")
+        st.session_state["agg_rows"] = [r for r in st.session_state.get("agg_rows", []) if r.get("id") != del_id]
+        # remove stale widget keys
+        remaining_ids = {r.get("id") for r in st.session_state.get("agg_rows", [])}
+        for k in list(st.session_state.keys()):
+            if k.startswith("agg_col_") or k.startswith("agg_func_") or k.startswith("agg_alias_"):
+                try:
+                    kid = int(k.split("_")[-1])
+                except Exception:
+                    continue
+                if kid not in remaining_ids:
+                    try:
+                        del st.session_state[k]
+                    except Exception:
+                        pass
+        _safe_rerun()
 
-    # Now render rows (after conversion). Delete operations are applied immediately to avoid index-shift issues.
-    new_rows = list(st.session_state.agg_rows)
-    # Measures header
+    # 3) Initialize widget keys for agg rows from state (before widget instantiation)
+    for r in st.session_state.get("agg_rows", []):
+        fid = r.get("id")
+        col_k = f"agg_col_{fid}"
+        func_k = f"agg_func_{fid}"
+        alias_k = f"agg_alias_{fid}"
+        if col_k not in st.session_state:
+            st.session_state[col_k] = r.get("col", "") or ""
+        if func_k not in st.session_state:
+            st.session_state[func_k] = r.get("func", "COUNT")
+        if alias_k not in st.session_state:
+            col_val = st.session_state.get(col_k, r.get("col", ""))
+            func_val = st.session_state.get(func_k, r.get("func", "COUNT"))
+            st.session_state[alias_k] = r.get("alias") or (f"{func_val.lower()}_{col_val.lower()}" if col_val else "")
+
+    # 4) Render rows
+    new_rows = list(st.session_state.get("agg_rows", []))
     st.subheader("Measures")
-    for i, row in enumerate(st.session_state.agg_rows):
-        if row.get("col", "") == "":
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                opts = [""] + all_cols
-                rid = row.get("id", i)
-                col_key = f"agg_col_{rid}"
-                # If the widget already has state, avoid forcing index which would override user choice
-                if col_key in st.session_state:
-                    sel = st.selectbox(
-                        f"Column #{i+1}",
-                        opts,
-                        key=col_key,
-                        format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
-                    )
-                else:
-                    sel = st.selectbox(
-                        f"Column #{i+1}",
-                        opts,
-                        index=0,
-                        key=col_key,
-                        format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""),
-                    )
-        else:
-            # Layout: Column | Function | Alias | Delete
-            c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
-            with c1:
-                options = all_cols if row.get("func", "COUNT") in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
-                if not options:
-                    options = all_cols
-                rid = row.get("id", i)
-                col_key = f"agg_col_{rid}"
-                if col_key in st.session_state:
-                    col = st.selectbox(
-                        f"Column #{i+1}",
-                        options,
-                        key=col_key,
-                        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-                    )
-                else:
-                    col = st.selectbox(
-                        f"Column #{i+1}",
-                        options,
-                        index=max(0, options.index(row["col"])) if row["col"] in options else 0,
-                        key=col_key,
-                        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-                    )
-            with c2:
-                rid = row.get("id", i)
-                func_key = f"agg_func_{rid}"
-                func_options = ["COUNT", "SUM", "AVG", "MIN", "MAX"]
-                if func_key in st.session_state:
-                    func = st.selectbox(
-                        f"Function #{i+1}",
-                        func_options,
-                        key=func_key,
-                    )
-                else:
-                    func = st.selectbox(
-                        f"Function #{i+1}",
-                        func_options,
-                        index=func_options.index(row.get("func", "COUNT")),
-                        key=func_key,
-                    )
-            with c3:
-                rid = row.get("id", i)
-                alias_key = f"agg_alias_{rid}"
-                # Auto-update alias logic must run BEFORE the widget is created to avoid Streamlit errors
-                func_key_local = f"agg_func_{rid}"
-                col_key_local = f"agg_col_{rid}"
-                cur_func_local = st.session_state.get(func_key_local, row.get("func"))
-                cur_col_local = st.session_state.get(col_key_local, row.get("col"))
-                prev_default_local = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
-                new_default_local = f"{cur_func_local.lower()}_{cur_col_local.lower()}" if cur_col_local else ""
-                if alias_key not in st.session_state:
-                    st.session_state[alias_key] = row.get("alias") or new_default_local
-                else:
-                    cur_val_local = st.session_state.get(alias_key, "")
-                    if cur_val_local == prev_default_local or cur_val_local == "":
-                        st.session_state[alias_key] = new_default_local
-                alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
-            with c4:
-                # use stable id-based keys for delete buttons so clicks map to rows reliably
-                btn_key = f"agg_del_{row.get('id', i)}"
-                if st.button("❌", key=btn_key):
-                    # defer deletion: record the id to delete and handle after the widget loop
-                    st.session_state["_agg_delete_id"] = row.get("id", i)
-            # After rendering widgets, read current widget values from session_state to avoid races
-            rid = row.get("id", i)
-            func_key = f"agg_func_{rid}"
-            col_key = f"agg_col_{rid}"
-            alias_key = f"agg_alias_{rid}"
+    for i, row in enumerate(list(st.session_state.get("agg_rows", []))):
+        rid = row.get("id", i)
+        col_key = f"agg_col_{rid}"
+        func_key = f"agg_func_{rid}"
+        alias_key = f"agg_alias_{rid}"
+        c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
+        with c1:
+            func_val = st.session_state.get(func_key, row.get("func", "COUNT"))
+            options = all_cols if func_val in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
+            cur_col_val = st.session_state.get(col_key, row.get("col", ""))
+            if cur_col_val and cur_col_val not in options:
+                options = [cur_col_val] + options
+            if not row.get("col"):
+                # placeholder: show only an empty-capable select
+                if col_key not in st.session_state:
+                    st.session_state[col_key] = ""
+                sel = st.selectbox(f"Column #{i+1}", [""] + all_cols, key=col_key, format_func=lambda x: (f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}" if x else ""))
+                if sel and sel != "":
+                    # conversion happens at top on next run
+                    continue
+            else:
+                sel_index = options.index(cur_col_val) if cur_col_val in options else 0
+                col = st.selectbox(f"Column #{i+1}", options, index=sel_index, key=col_key, format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}")
+        # if still no column selected, skip function/alias/delete
+        if not st.session_state.get(col_key):
+            continue
+        with c2:
+            func = st.selectbox(f"Function #{i+1}", ["COUNT", "SUM", "AVG", "MIN", "MAX"], key=func_key)
+        with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
-            cur_alias = st.session_state.get(alias_key, row.get("alias") or "")
-            # Do not assign to st.session_state[alias_key] here (widget already instantiated); we already set before widget
-            new_rows[i] = {"id": row.get("id"), "func": cur_func, "col": cur_col, "alias": cur_alias}
+            prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
+            new_default = f"{cur_func.lower()}_{cur_col.lower()}" if cur_col else ""
+            if alias_key not in st.session_state:
+                st.session_state[alias_key] = row.get("alias") or new_default
+            else:
+                cur_val = st.session_state.get(alias_key, "")
+                if cur_val == prev_default or cur_val == "":
+                    st.session_state[alias_key] = new_default
+            alias_widget_val = st.text_input(f"Alias #{i+1}", key=alias_key)
+        with c4:
+            if st.button("❌", key=f"agg_del_{rid}"):
+                st.session_state["_agg_delete_id"] = rid
+                _safe_rerun()
+        # persist current widget values into new_rows
+        new_rows[i] = {"id": rid, "func": st.session_state.get(func_key), "col": st.session_state.get(col_key), "alias": st.session_state.get(alias_key)}
 
     # If a delete was requested via session_state, apply it now and trigger a rerun.
     if "_agg_delete_id" in st.session_state:
