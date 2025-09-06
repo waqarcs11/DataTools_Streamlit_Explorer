@@ -402,6 +402,14 @@ with st.expander("Aggregations (optional)"):
     if dim_to_remove:
         st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
 
+    # Sync st.session_state["dims"] from widget keys so changes to selects update immediately
+    synced = []
+    for d in st.session_state.get("dims", []):
+        fid = d.get("id")
+        col = st.session_state.get(f"dim_col_{fid}", d.get("col", ""))
+        synced.append({"id": fid, "col": col})
+    st.session_state["dims"] = synced
+
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
         st.session_state.agg_rows = [{"func": "COUNT", "col": "", "alias": ""}]
