@@ -340,7 +340,17 @@ with st.expander("Filters (WHERE)", expanded=False):
 
     # persist
     st.session_state["filters"] = new_filters
-    filters = [r for r in st.session_state["filters"] if r.get("col")]
+    # Build effective filters from widget keys to avoid race conditions where
+    # st.session_state['filters'] may lag behind widget values during a rerun.
+    effective_filters = []
+    for fr in st.session_state.get("filters", []):
+        fid = fr.get("id")
+        col = st.session_state.get(f"f_col_{fid}", fr.get("col", ""))
+        op = st.session_state.get(f"f_op_{fid}", fr.get("op", ""))
+        val = st.session_state.get(f"f_val_{fid}", fr.get("val", ""))
+        if col:
+            effective_filters.append({"col": col, "op": op, "val": val})
+    filters = effective_filters
     # Place filter mode control below the filter rows for better UX
     if "filter_mode" not in st.session_state:
         st.session_state.filter_mode = "AND"
