@@ -400,7 +400,24 @@ with st.expander("Aggregations (optional)"):
 
     # apply dim removals
     if dim_to_remove:
-        st.session_state["dims"] = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
+        remaining = [r for r in st.session_state["dims"] if r.get("id") not in dim_to_remove]
+        st.session_state["dims"] = remaining
+        # remove any stale widget keys that belonged to deleted dims
+        remaining_ids = {r.get("id") for r in remaining}
+        for k in list(st.session_state.keys()):
+            if k.startswith("dim_col_") or k.startswith("dim_del_"):
+                try:
+                    parts = k.split("_")
+                    kid = int(parts[-1])
+                except Exception:
+                    continue
+                if kid not in remaining_ids:
+                    try:
+                        del st.session_state[k]
+                    except Exception:
+                        pass
+        # immediately rerun so UI reflects deletion
+        _safe_rerun()
 
     # Sync st.session_state["dims"] from widget keys so changes to selects update immediately
     synced = []
