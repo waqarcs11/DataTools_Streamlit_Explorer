@@ -678,9 +678,13 @@ def build_sql() -> str:
     select_parts: List[str] = []
 
     # Plain columns
-    # If dimensions are present, include them first and ignore the Select columns multiselect
+    # If dimensions are present, include them first and ignore the Select columns multiselect.
+    # Also ignore the Select columns if any measures (aggregates) are present.
     if dims:
         select_parts.extend([f"{q_ident(col)}" for col in dims])
+    elif agg_rows:
+        # no plain select columns when aggregates exist (only aggregates and optional dims)
+        pass
     else:
         if select_cols:
             select_parts.extend([f"{q_ident(col)}" for col in select_cols])
