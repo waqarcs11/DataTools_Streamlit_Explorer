@@ -243,12 +243,31 @@ with st.sidebar:
 st.header("2) Configure query")
 
 with st.expander("Select columns", expanded=True):
-    select_cols = st.multiselect(
-        "Pick columns to SELECT",
-        options=all_cols,
-        default=all_cols,
-        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-    )
+    # Hide the Select columns UI when any Dimension or Measure is present.
+    has_dims = any(d.get("col") for d in st.session_state.get("dims", []) if isinstance(d, dict))
+    has_measures = False
+    # Check agg_rows stored state
+    for r in st.session_state.get("agg_rows", []):
+        if isinstance(r, dict) and r.get("col"):
+            has_measures = True
+            break
+    # Also check any agg_col_ widget keys (in case conversion hasn't applied yet)
+    if not has_measures:
+        for k, v in st.session_state.items():
+            if k.startswith("agg_col_") and v:
+                has_measures = True
+                break
+
+    if not has_dims and not has_measures:
+        select_cols = st.multiselect(
+            "Pick columns to SELECT",
+            options=all_cols,
+            default=all_cols,
+            format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+        )
+    else:
+        # provide an empty placeholder so downstream code referencing select_cols doesn't fail
+        select_cols = []
 
 # Place Filters expander directly after Select columns per UX request
 with st.expander("Filters (WHERE)", expanded=False):
