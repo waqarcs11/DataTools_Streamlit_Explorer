@@ -5,8 +5,15 @@ import streamlit as st
 import pandas as pd
 from typing import List, Dict, Optional
 
-st.set_page_config(page_title="DataTools: Visual SQL Builder", layout="wide")
-st.title("Visual SQL Builder for Snowflake.")
+st.set_page_config(page_title="SnowPrep by DataTools Pro", layout="wide")
+# Title with small clickable byline
+st.markdown(
+    '<div style="display:flex;align-items:baseline;gap:8px;">'
+    '<h1 style="margin:0">SnowPrep</h1>'
+    '<span style="font-size:0.9rem"><a href="https://datatoolspro.com/" target="_blank">by DataTools Pro</a></span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
 
 # -----------------------------
 # Snowflake session bootstrap
