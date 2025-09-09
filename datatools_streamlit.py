@@ -267,10 +267,15 @@ with st.expander("Select columns", expanded=True):
     disabled = has_dims or has_measures
     if disabled:
         st.caption("Disabled because Dimensions or Measures are selected — these take precedence in the query.")
+    # Ensure stored defaults are valid for the current table (avoid streamlit default-not-in-options error)
+    prev_default = st.session_state.get("select_cols", all_cols)
+    safe_default = [c for c in prev_default if c in all_cols]
+    if not safe_default:
+        safe_default = all_cols
     select_cols = st.multiselect(
         "Pick columns to SELECT",
         options=all_cols,
-        default=st.session_state.get("select_cols", all_cols),
+        default=safe_default,
         format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
         key="select_cols",
         disabled=disabled,
