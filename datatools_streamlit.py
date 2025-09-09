@@ -256,17 +256,19 @@ if not has_measures:
             has_measures = True
             break
 
-# Only show the Select columns expander when no dims/measures are present
-if not has_dims and not has_measures:
-    with st.expander("Select columns", expanded=True):
-        select_cols = st.multiselect(
-            "Pick columns to SELECT",
-            options=all_cols,
-            default=all_cols,
-            format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
-        )
-else:
-    select_cols = []
+# Always show the Select columns expander but disable the multiselect when dims/measures exist
+with st.expander("Select columns", expanded=True):
+    disabled = has_dims or has_measures
+    if disabled:
+        st.caption("Disabled because Dimensions or Measures are selected — these take precedence in the query.")
+    select_cols = st.multiselect(
+        "Pick columns to SELECT",
+        options=all_cols,
+        default=st.session_state.get("select_cols", all_cols),
+        format_func=lambda x: f"{ICONS.get(classify_dtype(dtype_map.get(x, '')) , '')} {x}",
+        key="select_cols",
+        disabled=disabled,
+    )
 
 # Place Filters expander directly after Select columns per UX request
 with st.expander("Filters (WHERE)", expanded=False):
