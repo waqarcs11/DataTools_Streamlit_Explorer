@@ -553,7 +553,49 @@ with st.expander("Aggregations (optional)"):
         if not st.session_state.get(col_key):
             continue
         with c2:
-            func = st.selectbox(f"Function #{i+1}", ["COUNT", "SUM", "AVG", "MIN", "MAX"], key=func_key)
+            # Choose function options based on selected column data type
+            cur_col = st.session_state.get(col_key, row.get("col", ""))
+            dtype = dtype_map.get(cur_col, "") if cur_col else ""
+            cat = classify_dtype(dtype)
+            if cat == "text":
+                func_options = [
+                    "min",
+                    "max",
+                    "any value",
+                    "count non nulls",
+                    "count distinct",
+                    "min length",
+                    "max length",
+                    "average length",
+                ]
+            elif cat == "boolean":
+                func_options = ["any value", "count non nulls", "count distinct"]
+            elif cat == "numeric":
+                func_options = [
+                    "sum",
+                    "min",
+                    "max",
+                    "average",
+                    "median",
+                    "mode",
+                    "standard deviation",
+                    "variance",
+                    "any value",
+                    "count non nulls",
+                    "count distinct",
+                ]
+            elif cat == "date":
+                func_options = ["earliest", "latest", "any value", "count non nulls", "count distinct"]
+            else:
+                # Fallback for unknown types
+                func_options = ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+
+            # preserve any existing selection to avoid visual jump
+            existing_func = st.session_state.get(func_key, row.get("func", ""))
+            if existing_func and existing_func not in func_options:
+                func_options = [existing_func] + func_options
+            func_index = func_options.index(existing_func) if existing_func in func_options else 0
+            func = st.selectbox(f"Function #{i+1}", func_options, index=func_index, key=func_key)
         with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
