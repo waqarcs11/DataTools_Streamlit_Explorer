@@ -243,6 +243,12 @@ with st.sidebar:
 st.header("2) Configure query")
 
 has_dims = any(d.get("col") for d in st.session_state.get("dims", []) if isinstance(d, dict))
+# Also check any dim_col_ widget keys (in case conversion hasn't applied yet)
+if not has_dims:
+    for k, v in st.session_state.items():
+        if k.startswith("dim_col_") and v:
+            has_dims = True
+            break
 has_measures = False
 # Check agg_rows stored state
 for r in st.session_state.get("agg_rows", []):
