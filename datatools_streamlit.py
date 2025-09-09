@@ -615,6 +615,11 @@ with st.expander("Filter Aggregates", expanded=False):
         alias = a.get("alias") or f"{a['func'].lower()}_{a['col'].lower()}"
         agg_aliases.append(alias)
         alias_to_col[alias] = a["col"]
+    # Also make plain dimension columns available as aggregate targets (appear as aliases)
+    for dcol in dims:
+        if dcol and dcol not in agg_aliases:
+            agg_aliases.append(dcol)
+            alias_to_col[dcol] = dcol
 
     new_having = list(st.session_state.having)
     to_remove_h = []
