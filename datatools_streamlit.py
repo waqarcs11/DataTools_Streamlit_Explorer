@@ -467,7 +467,7 @@ with st.expander("Aggregations (optional)"):
 
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
-        st.session_state.agg_rows = [{"id": st.session_state.get("_agg_next_id", 0), "func": "COUNT", "col": "", "alias": ""}]
+        st.session_state.agg_rows = [{"id": st.session_state.get("_agg_next_id", 0), "func": "", "col": "", "alias": ""}]
         st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
     # ensure we have a per-row id generator to reliably identify rows across reruns
     if "_agg_next_id" not in st.session_state:
@@ -480,11 +480,11 @@ with st.expander("Aggregations (optional)"):
             k = f"agg_col_{r['id']}"
             if k in st.session_state and st.session_state.get(k):
                 r["col"] = st.session_state.get(k)
-                r["func"] = "COUNT"
+                r["func"] = ""
                 r["alias"] = f"{r['func'].lower()}_{r['col'].lower()}"
                 nid = st.session_state.get("_agg_next_id", 0)
                 st.session_state["_agg_next_id"] = nid + 1
-                st.session_state["agg_rows"].append({"id": nid, "func": "COUNT", "col": "", "alias": ""})
+                st.session_state["agg_rows"].append({"id": nid, "func": "", "col": "", "alias": ""})
                 converted = True
     if converted:
         st.session_state["agg_rows"] = list(st.session_state["agg_rows"])
@@ -631,7 +631,7 @@ with st.expander("Aggregations (optional)"):
     if not new_rows or new_rows[-1].get("col", "") != "":
         ph_id = st.session_state.get("_agg_next_id", 0)
         st.session_state["_agg_next_id"] = ph_id + 1
-        new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
+        new_rows.append({"id": ph_id, "func": "", "col": "", "alias": ""})
 
     st.session_state.agg_rows = new_rows
     # Use a cleaned view of agg_rows (exclude placeholders with empty 'col') for downstream logic
