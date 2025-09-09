@@ -675,11 +675,10 @@ with st.expander("Filter Aggregates", expanded=False):
 
 # (Filters expander was moved earlier to immediately follow Select columns)
 
-with st.expander("Group By", expanded=False):
-    group_cols = st.multiselect("Columns to GROUP BY", all_cols, default=[])
-    # If dimensions are present, they implicitly determine GROUP BY
-    if dims:
-        group_cols = dims
+# Group By UI removed: dimensions now drive GROUP BY automatically
+group_cols = []
+if dims:
+    group_cols = dims
 
 with st.expander("Sort", expanded=False):
     sort_cols = st.multiselect("ORDER BY columns", all_cols, default=[])
