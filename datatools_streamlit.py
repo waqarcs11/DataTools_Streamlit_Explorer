@@ -500,6 +500,11 @@ with st.expander("Aggregations (optional)"):
                 r["col"] = st.session_state.get(k)
                 r["func"] = ""
                 r["alias"] = ""
+                # Clear the function widget key to ensure empty default
+                func_key = f"agg_func_{r['id']}"
+                alias_key = f"agg_alias_{r['id']}"
+                st.session_state[func_key] = ""
+                st.session_state[alias_key] = ""
                 nid = st.session_state.get("_agg_next_id", 0)
                 st.session_state["_agg_next_id"] = nid + 1
                 st.session_state["agg_rows"].append({"id": nid, "func": "", "col": "", "alias": ""})
@@ -597,19 +602,22 @@ with st.expander("Aggregations (optional)"):
             
             # Check if function changed and update alias immediately
             prev_func = row.get("func", "")
-            if func != prev_func and func and selected_col:
-                # Update the alias when function changes
-                new_alias = f"{func.lower()}_{selected_col.lower()}"
-                # Only update if user hasn't customized the alias
-                current_alias = st.session_state.get(alias_key, "")
-                prev_default_alias = f"{prev_func.lower()}_{selected_col.lower()}" if prev_func else ""
-                if current_alias == prev_default_alias or current_alias == "":
-                    st.session_state[alias_key] = new_alias
+            if func != prev_func:
+                if func and selected_col:
+                    # Update the alias when function changes
+                    new_alias = f"{func.lower()}_{selected_col.lower()}"
+                    # Only update if user hasn't customized the alias
+                    current_alias = st.session_state.get(alias_key, "")
+                    prev_default_alias = f"{prev_func.lower()}_{selected_col.lower()}" if prev_func else ""
+                    if current_alias == prev_default_alias or current_alias == "":
+                        st.session_state[alias_key] = new_alias
+                # Trigger rerun when function changes to update UI immediately
+                _safe_rerun()
         with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
             prev_default = f"{(row.get('func') or '').lower()}_{(row.get('col') or '').lower()}" if row.get('col') else ""
-            new_default = f"{cur_func.lower()}_{cur_col.lower()}" if cur_col else ""
+            new_default = f"{cur_func.lower()}_{cur_col.lower()}" if cur_col and cur_func else ""
             if alias_key not in st.session_state:
                 st.session_state[alias_key] = row.get("alias") or new_default
             else:
