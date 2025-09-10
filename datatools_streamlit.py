@@ -139,6 +139,24 @@ def classify_dtype(dtype: str) -> str:
         return "text"
     return "other"
 
+def get_aggregate_functions_for_dtype(dtype: str) -> list:
+    """Return appropriate aggregate functions based on column data type."""
+    if not dtype:
+        # If no datatype found, return all functions (default behavior)
+        return ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+    
+    dtype_category = classify_dtype(dtype)
+    
+    if dtype_category == "numeric":
+        # Numeric columns support all aggregate functions
+        return ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+    elif dtype_category in ["text", "date", "boolean"]:
+        # Non-numeric columns support COUNT, MIN, MAX
+        return ["COUNT", "MIN", "MAX"]
+    else:
+        # For unknown/other types, support COUNT, MIN, MAX (safe operations)
+        return ["COUNT", "MIN", "MAX"]
+
 ICONS = {
     "text": "🔤",
     "numeric": "🔢",
@@ -553,7 +571,29 @@ with st.expander("Aggregations (optional)"):
         if not st.session_state.get(col_key):
             continue
         with c2:
-            func = st.selectbox(f"Function #{i+1}", ["COUNT", "SUM", "AVG", "MIN", "MAX"], key=func_key)
+            # Get selected column and its datatype to determine available functions
+            selected_col = st.session_state.get(col_key, row.get("col", ""))
+            if selected_col:
+                col_dtype = dtype_map.get(selected_col, "")
+                available_funcs = get_aggregate_functions_for_dtype(col_dtype)
+            else:
+                # Fallback to all functions if no column selected
+                available_funcs = ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+            
+            # Ensure current function is in available options
+            current_func = st.session_state.get(func_key, row.get("func", "COUNT"))
+            if current_func not in available_funcs:
+                # If current function isn't valid for this datatype, default to COUNT
+                current_func = "COUNT"
+                st.session_state[func_key] = current_func
+            
+            # Get index of current function in available options
+            try:
+                func_index = available_funcs.index(current_func)
+            except ValueError:
+                func_index = 0
+                
+            func = st.selectbox(f"Function #{i+1}", available_funcs, index=func_index, key=func_key)
         with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
