@@ -553,7 +553,29 @@ with st.expander("Aggregations (optional)"):
         if not st.session_state.get(col_key):
             continue
         with c2:
-            func = st.selectbox(f"Function #{i+1}", ["COUNT", "SUM", "AVG", "MIN", "MAX"], key=func_key)
+            func = st.selectbox(
+                f"Function #{i+1}",
+                [
+                    "count",
+                    "min",
+                    "max",
+                    "any value",
+                    "count non nulls",
+                    "count distinct",
+                    "min length",
+                    "max length",
+                    "average length",
+                    "sum",
+                    "average",
+                    "median",
+                    "mode",
+                    "standard deviation",
+                    "variance",
+                    "earliest",
+                    "latest",
+                ],
+                key=func_key,
+            )
         with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
