@@ -143,19 +143,19 @@ def get_aggregate_functions_for_dtype(dtype: str) -> list:
     """Return appropriate aggregate functions based on column data type."""
     if not dtype:
         # If no datatype found, return all functions (default behavior)
-        return ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+        return ["", "COUNT", "SUM", "AVG", "MIN", "MAX"]
     
     dtype_category = classify_dtype(dtype)
     
     if dtype_category == "numeric":
         # Numeric columns support all aggregate functions
-        return ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+        return ["", "COUNT", "SUM", "AVG", "MIN", "MAX"]
     elif dtype_category in ["text", "date", "boolean"]:
         # Non-numeric columns support COUNT, MIN, MAX
-        return ["COUNT", "MIN", "MAX"]
+        return ["", "COUNT", "MIN", "MAX"]
     else:
         # For unknown/other types, support COUNT, MIN, MAX (safe operations)
-        return ["COUNT", "MIN", "MAX"]
+        return ["", "COUNT", "MIN", "MAX"]
 
 ICONS = {
     "text": "🔤",
@@ -485,7 +485,7 @@ with st.expander("Aggregations (optional)"):
 
     # initialize agg_rows if not present - start with one placeholder that has empty col
     if "agg_rows" not in st.session_state:
-        st.session_state.agg_rows = [{"id": st.session_state.get("_agg_next_id", 0), "func": "COUNT", "col": "", "alias": ""}]
+        st.session_state.agg_rows = [{"id": st.session_state.get("_agg_next_id", 0), "func": "", "col": "", "alias": ""}]
         st.session_state["_agg_next_id"] = st.session_state.get("_agg_next_id", 0) + 1
     # ensure we have a per-row id generator to reliably identify rows across reruns
     if "_agg_next_id" not in st.session_state:
@@ -498,11 +498,11 @@ with st.expander("Aggregations (optional)"):
             k = f"agg_col_{r['id']}"
             if k in st.session_state and st.session_state.get(k):
                 r["col"] = st.session_state.get(k)
-                r["func"] = "COUNT"
-                r["alias"] = f"{r['func'].lower()}_{r['col'].lower()}"
+                r["func"] = ""
+                r["alias"] = ""
                 nid = st.session_state.get("_agg_next_id", 0)
                 st.session_state["_agg_next_id"] = nid + 1
-                st.session_state["agg_rows"].append({"id": nid, "func": "COUNT", "col": "", "alias": ""})
+                st.session_state["agg_rows"].append({"id": nid, "func": "", "col": "", "alias": ""})
                 converted = True
     if converted:
         st.session_state["agg_rows"] = list(st.session_state["agg_rows"])
@@ -535,11 +535,11 @@ with st.expander("Aggregations (optional)"):
         if col_k not in st.session_state:
             st.session_state[col_k] = r.get("col", "") or ""
         if func_k not in st.session_state:
-            st.session_state[func_k] = r.get("func", "COUNT")
+            st.session_state[func_k] = r.get("func", "")
         if alias_k not in st.session_state:
             col_val = st.session_state.get(col_k, r.get("col", ""))
-            func_val = st.session_state.get(func_k, r.get("func", "COUNT"))
-            st.session_state[alias_k] = r.get("alias") or (f"{func_val.lower()}_{col_val.lower()}" if col_val else "")
+            func_val = st.session_state.get(func_k, r.get("func", ""))
+            st.session_state[alias_k] = r.get("alias") or (f"{func_val.lower()}_{col_val.lower()}" if col_val and func_val else "")
 
     # 4) Render rows
     new_rows = list(st.session_state.get("agg_rows", []))
@@ -551,8 +551,8 @@ with st.expander("Aggregations (optional)"):
         alias_key = f"agg_alias_{rid}"
         c1, c2, c3, c4 = st.columns([1, 2, 2, 1])
         with c1:
-            func_val = st.session_state.get(func_key, row.get("func", "COUNT"))
-            options = all_cols if func_val in ["COUNT", "MIN", "MAX"] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
+            func_val = st.session_state.get(func_key, row.get("func", ""))
+            options = all_cols if func_val in ["COUNT", "MIN", "MAX", ""] else [c for c in all_cols if is_numeric_type(dtype_map[c])]
             cur_col_val = st.session_state.get(col_key, row.get("col", ""))
             if cur_col_val and cur_col_val not in options:
                 options = [cur_col_val] + options
@@ -578,13 +578,13 @@ with st.expander("Aggregations (optional)"):
                 available_funcs = get_aggregate_functions_for_dtype(col_dtype)
             else:
                 # Fallback to all functions if no column selected
-                available_funcs = ["COUNT", "SUM", "AVG", "MIN", "MAX"]
+                available_funcs = ["", "COUNT", "SUM", "AVG", "MIN", "MAX"]
             
             # Ensure current function is in available options
-            current_func = st.session_state.get(func_key, row.get("func", "COUNT"))
+            current_func = st.session_state.get(func_key, row.get("func", ""))
             if current_func not in available_funcs:
-                # If current function isn't valid for this datatype, default to COUNT
-                current_func = "COUNT"
+                # If current function isn't valid for this datatype, default to empty
+                current_func = ""
                 st.session_state[func_key] = current_func
             
             # Get index of current function in available options
@@ -594,6 +594,17 @@ with st.expander("Aggregations (optional)"):
                 func_index = 0
                 
             func = st.selectbox(f"Function #{i+1}", available_funcs, index=func_index, key=func_key)
+            
+            # Check if function changed and update alias immediately
+            prev_func = row.get("func", "")
+            if func != prev_func and func and selected_col:
+                # Update the alias when function changes
+                new_alias = f"{func.lower()}_{selected_col.lower()}"
+                # Only update if user hasn't customized the alias
+                current_alias = st.session_state.get(alias_key, "")
+                prev_default_alias = f"{prev_func.lower()}_{selected_col.lower()}" if prev_func else ""
+                if current_alias == prev_default_alias or current_alias == "":
+                    st.session_state[alias_key] = new_alias
         with c3:
             cur_func = st.session_state.get(func_key, row.get("func"))
             cur_col = st.session_state.get(col_key, row.get("col"))
@@ -629,11 +640,11 @@ with st.expander("Aggregations (optional)"):
     if not new_rows or new_rows[-1].get("col", "") != "":
         ph_id = st.session_state.get("_agg_next_id", 0)
         st.session_state["_agg_next_id"] = ph_id + 1
-        new_rows.append({"id": ph_id, "func": "COUNT", "col": "", "alias": ""})
+        new_rows.append({"id": ph_id, "func": "", "col": "", "alias": ""})
 
     st.session_state.agg_rows = new_rows
-    # Use a cleaned view of agg_rows (exclude placeholders with empty 'col') for downstream logic
-    agg_rows = [r for r in st.session_state.agg_rows if r.get("col")]
+    # Use a cleaned view of agg_rows (exclude placeholders with empty 'col' or 'func') for downstream logic
+    agg_rows = [r for r in st.session_state.agg_rows if r.get("col") and r.get("func")]
     # Build dimensions list (exclude placeholders). When present, dimensions will be used
     # in the SELECT and GROUP BY and will replace the main `select_cols` selection.
     dims = [d["col"] for d in st.session_state.get("dims", []) if d.get("col")]
