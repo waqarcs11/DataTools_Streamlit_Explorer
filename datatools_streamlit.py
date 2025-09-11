@@ -640,28 +640,29 @@ if agg_rows or dims:
         if converted:
             st.session_state["having"] = list(st.session_state["having"])
 
-        # Pre-initialize widget keys for having rows so Streamlit uses stored values
-        # instead of defaulting selectboxes to the first option on first interaction.
-        for existing in st.session_state.get("having", []):
-            hid_init = existing.get("id")
-            tkey_init = f"h_target_{hid_init}"
-            okey_init = f"h_op_{hid_init}"
-            vkey_init = f"h_val_{hid_init}"
-            if tkey_init not in st.session_state:
-                st.session_state[tkey_init] = existing.get("target", "") or ""
-            try:
-                ops_init = ops_for_agg_target(st.session_state.get(tkey_init, ""), agg_rows, dtype_map)
-            except Exception:
-                ops_init = []
-            if okey_init not in st.session_state:
-                if ops_init and existing.get("op") in ops_init:
-                    st.session_state[okey_init] = existing.get("op")
-                elif ops_init:
-                    st.session_state[okey_init] = ops_init[0]
-                else:
-                    st.session_state[okey_init] = existing.get("op", ">")
-            if vkey_init not in st.session_state:
-                st.session_state[vkey_init] = existing.get("val", "")
+        # If any placeholder already has a widget value (user selected an aggregate/alias on previous run),
+        # convert it now into a real having row and append a new placeholder before rendering widgets.
+        converted = False
+        for hr in list(st.session_state.get("having", [])):
+            if not hr.get("target"):
+                k = f"h_target_{hr['id']}"
+                if k in st.session_state and st.session_state.get(k):
+                    hr["target"] = st.session_state.get(k)
+                    hr["op"] = ">"
+                    hr["val"] = ""
+                    nid = st.session_state.get("_agg_next_id", 0)
+                    st.session_state["_agg_next_id"] = nid + 1
+                    st.session_state["having"].append({"id": nid, "target": "", "op": ">", "val": ""})
+                    converted = True
+        if converted:
+            st.session_state["having"] = list(st.session_state["having"])
+
+        # Ensure widget keys for remaining having rows reflect the stored values
+        for fr in st.session_state.get("having", []):
+            fid = fr.get("id")
+            st.session_state[f"h_target_{fid}"] = fr.get("target") or ""
+            st.session_state[f"h_op_{fid}"] = fr.get("op") or ""
+            st.session_state[f"h_val_{fid}"] = fr.get("val") or ""
 
         new_having = list(st.session_state.having)
         to_remove_h = []
@@ -673,6 +674,10 @@ if agg_rows or dims:
                 with c1:
                     key = f"h_target_{hid}"
                     opts = [""] + agg_aliases if agg_aliases else [""]
+                    # If the widget key already exists and its value isn't in opts yet,
+                    # include it so Streamlit doesn't reset the selectbox to the first option.
+                    if key in st.session_state and st.session_state.get(key) and st.session_state.get(key) not in opts:
+                        opts = ["", st.session_state.get(key)] + [o for o in agg_aliases if o != st.session_state.get(key)]
                     if key in st.session_state:
                         tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
                     else:
@@ -697,16 +702,26 @@ if agg_rows or dims:
                 with c1:
                     key = f"h_target_{hid}"
                     if agg_aliases:
-                        if key in st.session_state:
-                            target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                        # Ensure the stored widget value or h.get("target") is present in options so selectbox
+                        # can show it instead of resetting to the first option.
+                        stored = st.session_state.get(key) if key in st.session_state else h.get("target")
+                        if stored and stored not in agg_aliases:
+                            opts = [stored] + agg_aliases
                         else:
-                            default_idx = agg_aliases.index(h.get("target")) if h.get("target") in agg_aliases else 0
-                            target = st.selectbox(f"Aggregate/alias #{hi+1}", agg_aliases, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                            opts = agg_aliases
+                        if key in st.session_state:
+                            target = st.selectbox(f"Aggregate/alias #{hi+1}", opts, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                        else:
+                            default_idx = opts.index(h.get("target")) if h.get("target") in opts else 0
+                            target = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
                     else:
                         target = st.text_input(f"Aggregate expr #{hi+1}", key=key, value=h.get("target", ""))
                 with c2:
                     ops = ops_for_agg_target(target if isinstance(target, str) else h.get("target", ""), agg_rows, dtype_map)
                     op_key = f"h_op_{hid}"
+                    # If a stored op exists but isn't in the ops list (due to dtype inference), include it
+                    if op_key in st.session_state and st.session_state.get(op_key) and st.session_state.get(op_key) not in ops:
+                        ops = [st.session_state.get(op_key)] + [o for o in ops if o != st.session_state.get(op_key)]
                     if op_key in st.session_state:
                         op = st.selectbox(f"Op #{hi+1}", ops, key=op_key)
                     else:
