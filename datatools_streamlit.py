@@ -630,29 +630,21 @@ if agg_rows or dims:
             if not hr.get("target"):
                 k = f"h_target_{hr['id']}"
                 if k in st.session_state and st.session_state.get(k):
-                    hr["target"] = st.session_state.get(k)
-                    hr["op"] = ">"
+                    selected_tgt = st.session_state.get(k)
+                    hr["target"] = selected_tgt
+                    # pick a sensible default operator based on the inferred ops for this target
+                    try:
+                        default_ops = ops_for_agg_target(selected_tgt, agg_rows, dtype_map)
+                    except Exception:
+                        default_ops = [">"]
+                    hr["op"] = default_ops[0] if default_ops else ">"
                     hr["val"] = ""
+                    # ensure widget keys exist for this row so the next render shows the chosen values
+                    st.session_state[f"h_op_{hr['id']}"] = hr["op"]
+                    st.session_state[f"h_val_{hr['id']}"] = hr["val"]
                     nid = st.session_state.get("_agg_next_id", 0)
                     st.session_state["_agg_next_id"] = nid + 1
-                    st.session_state["having"].append({"id": nid, "target": "", "op": ">", "val": ""})
-                    converted = True
-        if converted:
-            st.session_state["having"] = list(st.session_state["having"])
-
-        # If any placeholder already has a widget value (user selected an aggregate/alias on previous run),
-        # convert it now into a real having row and append a new placeholder before rendering widgets.
-        converted = False
-        for hr in list(st.session_state.get("having", [])):
-            if not hr.get("target"):
-                k = f"h_target_{hr['id']}"
-                if k in st.session_state and st.session_state.get(k):
-                    hr["target"] = st.session_state.get(k)
-                    hr["op"] = ">"
-                    hr["val"] = ""
-                    nid = st.session_state.get("_agg_next_id", 0)
-                    st.session_state["_agg_next_id"] = nid + 1
-                    st.session_state["having"].append({"id": nid, "target": "", "op": ">", "val": ""})
+                    st.session_state["having"].append({"id": nid, "target": "", "op": hr["op"], "val": ""})
                     converted = True
         if converted:
             st.session_state["having"] = list(st.session_state["having"])
@@ -665,8 +657,19 @@ if agg_rows or dims:
             vkey = f"h_val_{fid}"
             if tkey not in st.session_state:
                 st.session_state[tkey] = fr.get("target") or ""
+            # compute valid ops for this target and initialize op key to a valid value
+            target_val = st.session_state.get(tkey, fr.get("target", ""))
+            try:
+                ops_init = ops_for_agg_target(target_val, agg_rows, dtype_map)
+            except Exception:
+                ops_init = []
             if okey not in st.session_state:
-                st.session_state[okey] = fr.get("op") or ""
+                if ops_init and fr.get("op") in ops_init:
+                    st.session_state[okey] = fr.get("op")
+                elif ops_init:
+                    st.session_state[okey] = ops_init[0]
+                else:
+                    st.session_state[okey] = fr.get("op") or ""
             if vkey not in st.session_state:
                 st.session_state[vkey] = fr.get("val") or ""
 
