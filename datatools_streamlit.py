@@ -622,6 +622,29 @@ if agg_rows or dims:
                 agg_aliases.append(dcol)
                 alias_to_col[dcol] = dcol
 
+        # Pre-initialize widget keys for having rows so Streamlit uses stored values
+        # instead of defaulting selectboxes to the first option on first interaction.
+        for existing in st.session_state.get("having", []):
+            hid_init = existing.get("id")
+            tkey_init = f"h_target_{hid_init}"
+            okey_init = f"h_op_{hid_init}"
+            vkey_init = f"h_val_{hid_init}"
+            if tkey_init not in st.session_state:
+                st.session_state[tkey_init] = existing.get("target", "") or ""
+            try:
+                ops_init = ops_for_agg_target(st.session_state.get(tkey_init, ""), agg_rows, dtype_map)
+            except Exception:
+                ops_init = []
+            if okey_init not in st.session_state:
+                if ops_init and existing.get("op") in ops_init:
+                    st.session_state[okey_init] = existing.get("op")
+                elif ops_init:
+                    st.session_state[okey_init] = ops_init[0]
+                else:
+                    st.session_state[okey_init] = existing.get("op", ">")
+            if vkey_init not in st.session_state:
+                st.session_state[vkey_init] = existing.get("val", "")
+
         new_having = list(st.session_state.having)
         to_remove_h = []
         for hi, h in enumerate(list(st.session_state.having)):
