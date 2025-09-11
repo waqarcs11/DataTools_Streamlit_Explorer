@@ -774,6 +774,21 @@ if agg_rows or dims:
         # apply removals
         if to_remove_h:
             st.session_state.having = [r for r in new_having if r.get("id") not in to_remove_h]
+            # remove stale widget keys for deleted rows
+            remaining_ids = {r.get("id") for r in st.session_state.having}
+            for k in list(st.session_state.keys()):
+                if k.startswith("h_target_") or k.startswith("h_op_") or k.startswith("h_val_") or k.startswith("h_del_"):
+                    try:
+                        parts = k.split("_")
+                        kid = int(parts[-1])
+                    except Exception:
+                        continue
+                    if kid not in remaining_ids:
+                        try:
+                            del st.session_state[k]
+                        except Exception:
+                            pass
+            _safe_rerun()
         else:
             st.session_state.having = new_having
 
