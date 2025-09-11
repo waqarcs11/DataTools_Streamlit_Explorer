@@ -622,6 +622,24 @@ if agg_rows or dims:
                 agg_aliases.append(dcol)
                 alias_to_col[dcol] = dcol
 
+        # Convert any placeholder having rows where a widget key already holds a value
+        # (same pattern as Filters WHERE). This converts the placeholder into a full row
+        # before rendering so the selected value persists.
+        converted = False
+        for hr in list(st.session_state.get("having", [])):
+            if not hr.get("target"):
+                k = f"h_target_{hr['id']}"
+                if k in st.session_state and st.session_state.get(k):
+                    hr["target"] = st.session_state.get(k)
+                    hr["op"] = ">"
+                    hr["val"] = ""
+                    nid = st.session_state.get("_agg_next_id", 0)
+                    st.session_state["_agg_next_id"] = nid + 1
+                    st.session_state["having"].append({"id": nid, "target": "", "op": ">", "val": ""})
+                    converted = True
+        if converted:
+            st.session_state["having"] = list(st.session_state["having"])
+
         # Pre-initialize widget keys for having rows so Streamlit uses stored values
         # instead of defaulting selectboxes to the first option on first interaction.
         for existing in st.session_state.get("having", []):
@@ -660,7 +678,7 @@ if agg_rows or dims:
                     else:
                         tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=0, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
                 if tgt and tgt != "":
-                    # convert placeholder into full having row and append new placeholder
+                    # convert placeholder into full having row and append new placeholder (do not force a rerun)
                     for rr in st.session_state.having:
                         if rr.get("id") == hid:
                             rr["target"] = tgt
@@ -669,7 +687,9 @@ if agg_rows or dims:
                     nid = st.session_state.get("_agg_next_id", 0)
                     st.session_state["_agg_next_id"] = nid + 1
                     st.session_state.having.append({"id": nid, "target": "", "op": ">", "val": ""})
+                    # update state so subsequent rendering sees the converted row
                     st.session_state.having = list(st.session_state.having)
+                    # trigger a rerun so the placeholder conversion is applied immediately
                     _safe_rerun()
             else:
                 # full having row: target (alias), op, val, del
