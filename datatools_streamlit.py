@@ -703,10 +703,13 @@ if agg_rows or dims:
                     # include it so Streamlit doesn't reset the selectbox to the first option.
                     if key in st.session_state and st.session_state.get(key) and st.session_state.get(key) not in opts:
                         opts = ["", st.session_state.get(key)] + [o for o in agg_aliases if o != st.session_state.get(key)]
-                    if key in st.session_state:
-                        tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
-                    else:
-                        tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=0, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
+                    # Determine the correct index based on stored value
+                    stored_val = st.session_state.get(key, "")
+                    try:
+                        default_idx = opts.index(stored_val) if stored_val in opts else 0
+                    except (ValueError, TypeError):
+                        default_idx = 0
+                    tgt = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=default_idx, key=key, format_func=lambda al: (f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}" if al else ""))
                 if tgt and tgt != "":
                     # convert placeholder into full having row and append new placeholder (do not force a rerun)
                     for rr in st.session_state.having:
@@ -734,11 +737,13 @@ if agg_rows or dims:
                             opts = [stored] + agg_aliases
                         else:
                             opts = agg_aliases
-                        if key in st.session_state:
-                            target = st.selectbox(f"Aggregate/alias #{hi+1}", opts, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
-                        else:
-                            default_idx = opts.index(h.get("target")) if h.get("target") in opts else 0
-                            target = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
+                        # Determine the correct index based on stored value or fallback to h.get("target")
+                        stored_val = st.session_state.get(key, h.get("target", ""))
+                        try:
+                            default_idx = opts.index(stored_val) if stored_val in opts else 0
+                        except (ValueError, TypeError):
+                            default_idx = 0
+                        target = st.selectbox(f"Aggregate/alias #{hi+1}", opts, index=default_idx, key=key, format_func=lambda al: f"{ICONS.get(classify_dtype(dtype_map.get(alias_to_col.get(al, ''), '')), '')} {al}")
                     else:
                         target = st.text_input(f"Aggregate expr #{hi+1}", key=key, value=h.get("target", ""))
                 with c2:
