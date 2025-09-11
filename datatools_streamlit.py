@@ -631,20 +631,36 @@ if agg_rows or dims:
                 k = f"h_target_{hr['id']}"
                 if k in st.session_state and st.session_state.get(k):
                     selected_tgt = st.session_state.get(k)
-                    hr["target"] = selected_tgt
-                    # pick a sensible default operator based on the inferred ops for this target
+                    # compute valid ops for this target
                     try:
-                        default_ops = ops_for_agg_target(selected_tgt, agg_rows, dtype_map)
+                        ops_for_target = ops_for_agg_target(selected_tgt, agg_rows, dtype_map)
                     except Exception:
-                        default_ops = [">"]
-                    hr["op"] = default_ops[0] if default_ops else ">"
-                    hr["val"] = ""
-                    # ensure widget keys exist for this row so the next render shows the chosen values
-                    st.session_state[f"h_op_{hr['id']}"] = hr["op"]
-                    st.session_state[f"h_val_{hr['id']}"] = hr["val"]
+                        ops_for_target = []
+                    op_key = f"h_op_{hr['id']}"
+                    val_key = f"h_val_{hr['id']}"
+                    # prefer any operator/value the user may have already selected in widget state
+                    chosen_op = None
+                    if op_key in st.session_state and st.session_state.get(op_key):
+                        cand = st.session_state.get(op_key)
+                        if not ops_for_target or cand in ops_for_target:
+                            chosen_op = cand
+                    if chosen_op is None:
+                        chosen_op = ops_for_target[0] if ops_for_target else hr.get("op", ">")
+                    chosen_val = st.session_state.get(val_key, hr.get("val", ""))
+                    # commit into having row and ensure widget keys reflect these persisted choices
+                    hr["target"] = selected_tgt
+                    hr["op"] = chosen_op
+                    hr["val"] = chosen_val
+                    if op_key not in st.session_state:
+                        st.session_state[op_key] = chosen_op
+                    else:
+                        # keep existing widget op if already present
+                        st.session_state[op_key] = st.session_state.get(op_key)
+                    if val_key not in st.session_state:
+                        st.session_state[val_key] = chosen_val
                     nid = st.session_state.get("_agg_next_id", 0)
                     st.session_state["_agg_next_id"] = nid + 1
-                    st.session_state["having"].append({"id": nid, "target": "", "op": hr["op"], "val": ""})
+                    st.session_state["having"].append({"id": nid, "target": "", "op": chosen_op, "val": chosen_val})
                     converted = True
         if converted:
             st.session_state["having"] = list(st.session_state["having"])
