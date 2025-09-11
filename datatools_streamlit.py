@@ -660,9 +660,15 @@ if agg_rows or dims:
         # Ensure widget keys for remaining having rows reflect the stored values
         for fr in st.session_state.get("having", []):
             fid = fr.get("id")
-            st.session_state[f"h_target_{fid}"] = fr.get("target") or ""
-            st.session_state[f"h_op_{fid}"] = fr.get("op") or ""
-            st.session_state[f"h_val_{fid}"] = fr.get("val") or ""
+            tkey = f"h_target_{fid}"
+            okey = f"h_op_{fid}"
+            vkey = f"h_val_{fid}"
+            if tkey not in st.session_state:
+                st.session_state[tkey] = fr.get("target") or ""
+            if okey not in st.session_state:
+                st.session_state[okey] = fr.get("op") or ""
+            if vkey not in st.session_state:
+                st.session_state[vkey] = fr.get("val") or ""
 
         new_having = list(st.session_state.having)
         to_remove_h = []
