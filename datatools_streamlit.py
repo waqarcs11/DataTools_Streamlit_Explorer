@@ -698,11 +698,15 @@ if agg_rows or dims:
                 c1, c2, c3, c4 = st.columns([2, 1.2, 3, 0.6])
                 with c1:
                     key = f"h_target_{hid}"
-                    opts = [""] + agg_aliases if agg_aliases else [""]
+                    # Get already selected targets from existing having rows (excluding current placeholder)
+                    selected_targets = [r.get("target") for r in st.session_state.having if r.get("target") and r.get("id") != hid]
+                    # Filter out already selected options from available choices
+                    available_aliases = [alias for alias in agg_aliases if alias not in selected_targets] if agg_aliases else []
+                    opts = [""] + available_aliases
                     # If the widget key already exists and its value isn't in opts yet,
                     # include it so Streamlit doesn't reset the selectbox to the first option.
                     if key in st.session_state and st.session_state.get(key) and st.session_state.get(key) not in opts:
-                        opts = ["", st.session_state.get(key)] + [o for o in agg_aliases if o != st.session_state.get(key)]
+                        opts = ["", st.session_state.get(key)] + [o for o in available_aliases if o != st.session_state.get(key)]
                     # Determine the correct index based on stored value
                     stored_val = st.session_state.get(key, "")
                     try:
