@@ -1,0 +1,13 @@
+# Streamlit environment configuration for SnowPrep Native App
+name: snowprep_streamlit
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - pip:
+    - streamlit>=1.28.0
+    - pandas>=1.3.0
+    - snowflake-snowpark-python>=1.8.0
+    - typing-extensions

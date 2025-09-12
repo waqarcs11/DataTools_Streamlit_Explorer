@@ -1,0 +1,48 @@
+# Snowflake Native App Manifest for SnowPrep
+version:
+  name: V1_0
+  label: "Version 1.0"
+  comment: "Initial release of SnowPrep - Visual SQL Builder for Snowflake"
+
+artifacts:
+  readme: README.md
+  
+  # Streamlit app configuration
+  streamlit:
+    - name: snowprep_app
+      identifier: snowprep_streamlit
+      title: "SnowPrep - Visual SQL Builder"
+      description: "Interactive visual SQL builder for Snowflake data exploration"
+      stage: app_stage.streamlit
+      main_file: snowprep_app.py
+      query_warehouse: optional
+
+configuration:
+  log_level: INFO
+  trace_level: OFF
+
+privileges:
+  - USAGE_ON_WAREHOUSE
+  - CREATE_DATABASE
+  - CREATE_SCHEMA
+  - CREATE_TABLE
+  - CREATE_VIEW
+  - SELECT_ON_CURRENT_ACCOUNT
+  - DESCRIBE_ON_CURRENT_ACCOUNT
+  - MONITOR_USAGE_ON_CURRENT_ACCOUNT
+
+references:
+  - 
+    name: warehouse_reference
+    label: "Query Warehouse"
+    description: "Warehouse for running queries"
+    privileges:
+      - USAGE
+      - MONITOR
+    object_type: WAREHOUSE
+    multi_valued: false
+    register_callback: config.register_warehouse_callback
+
+setup_script: scripts/setup.sql
+
+post_setup_script: scripts/post_setup.sql
